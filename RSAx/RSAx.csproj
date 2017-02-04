@@ -8,7 +8,7 @@
     <ProjectGuid>{5DEE8380-3CF6-454D-84AF-93B521175F44}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>RSAx</RootNamespace>
+    <RootNamespace>ArpanTECH</RootNamespace>
     <AssemblyName>RSAx</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>

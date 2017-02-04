@@ -3,21 +3,17 @@
 // @Application : RSAx Test Application
 // @CodeProject: http://www.codeproject.com/Articles/421656/RSA-Library-with-Private-Key-Encryption-in-Csharp  
 
+using ArpanTECH;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
+using System.Diagnostics;
 using System.Drawing;
-using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Forms;
-using ArpanTECH;
-using System.Security.Cryptography;
-using System.Diagnostics;
 
 namespace RSA_Algorithm
 {
-    public partial class RSAxTestForm : Form
+	public partial class RSAxTestForm : Form
     {
         public RSAxTestForm()
         {
@@ -98,7 +94,7 @@ namespace RSA_Algorithm
 
             RSAxParameters param = RSAxUtils.GetRSAxParameters(richTextBox_Key.Text, int.Parse(comboBox_ModulusSize.Text));
             RSAx rsax = new RSAx(param);
-            rsax.UseCRTForPublicDecryption = checkBox_UseCRT.Checked;
+            rsax.UseCrtForPublicDecryption = checkBox_UseCRT.Checked;
             rsax.RSAxHashAlgorithm = ha_types[comboBox_OAEP_Hash.SelectedIndex];
 
             int hLen = hLens[comboBox_OAEP_Hash.SelectedIndex];
