@@ -17,21 +17,17 @@ namespace ArpanTECH
 		/// <summary>
 		/// Creates a RSAxParameters class from a given XMLKeyInfo string.
 		/// </summary>
-		/// <param name="XMLKeyInfo">Key Data.</param>
-		/// <param name="ModulusSize">RSA Modulus Size</param>
+		/// <param name="xmlKeyInfo">Key Data.</param>
+		/// <param name="modulusSize">RSA Modulus Size</param>
 		/// <returns>RSAxParameters class</returns>
-		public static RSAxParameters GetRSAxParameters(string XMLKeyInfo, int ModulusSize)
+		public static RSAxParameters GetRSAxParameters(string xmlKeyInfo, int modulusSize)
 		{
-			bool hasCRTInfo = false;
-			bool hasPrivateInfo = false;
-			bool hasPublicInfo = false;
-
 			XmlDocument doc = new XmlDocument();
 			try
 			{
-				doc.LoadXml(XMLKeyInfo);
+				doc.LoadXml(xmlKeyInfo);
 			}
-			catch (System.Exception ex)
+			catch (Exception ex)
 			{
 				throw new Exception("Malformed KeyInfo XML: " + ex.Message);
 			}
@@ -45,51 +41,42 @@ namespace ArpanTECH
 			byte[] dq = new byte[0]; 
 			byte[] inverseQ = new byte[0];
 
-			try
-			{
-				modulus = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("Modulus").InnerText);
-				exponent = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("Exponent").InnerText);
-				hasPublicInfo = true;
-			}
-			catch { }
+			var docelem = doc.DocumentElement;
 
-			try
-			{
-				modulus = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("Modulus").InnerText);
-				d = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("D").InnerText);
-				exponent = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("Exponent").InnerText);
-				hasPrivateInfo = true;
-			}
-			catch { }
+			if (docelem == null) throw new Exception("Could not process XMLKeyInfo. No key information.");
 
-			try
-			{
-				modulus = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("Modulus").InnerText);
-				p = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("P").InnerText);
-				q = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("Q").InnerText);
-				dp = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("DP").InnerText);
-				dq = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("DQ").InnerText);
-				inverseQ = Convert.FromBase64String(doc.DocumentElement.SelectSingleNode("InverseQ").InnerText);
-				hasCRTInfo = true;
-			}
-			catch { }
+			var nodeMod = docelem.SelectSingleNode("Modulus");
+			var nodeExp = docelem.SelectSingleNode("Exponent");
+			var nodeD = docelem.SelectSingleNode("D");
+			var nodeP = docelem.SelectSingleNode("P");
+			var nodeQ = docelem.SelectSingleNode("Q");
+			var nodeDP = docelem.SelectSingleNode("DP");
+			var nodeDQ = docelem.SelectSingleNode("DQ");
+			var nodeInvQ = docelem.SelectSingleNode("InverseQ");
+
+			if (nodeMod != null)  modulus  = Convert.FromBase64String(nodeMod.InnerText);
+			if (nodeExp != null)  exponent = Convert.FromBase64String(nodeExp.InnerText);
+			if (nodeD != null)    d        = Convert.FromBase64String(nodeD.InnerText);
+			if (nodeP != null)    p        = Convert.FromBase64String(nodeP.InnerText);
+			if (nodeQ != null)    q        = Convert.FromBase64String(nodeQ.InnerText);
+			if (nodeDP != null)   dp       = Convert.FromBase64String(nodeDP.InnerText);
+			if (nodeDQ != null)   dq       = Convert.FromBase64String(nodeDQ.InnerText);
+			if (nodeInvQ != null) inverseQ = Convert.FromBase64String(nodeInvQ.InnerText);
+
+			var hasPublicInfo = (nodeMod != null) && (nodeExp != null);
+			var hasPrivateInfo = hasPublicInfo && (nodeD != null);
+			var hasCRTInfo = (nodeMod != null) && (nodeP != null) && (nodeQ != null) && (nodeDP != null) && (nodeDQ != null) && (nodeInvQ != null);
 
 			if (hasCRTInfo && hasPrivateInfo)
-			{
-				return new RSAxParameters(modulus, exponent, d, p, q, dp, dq, inverseQ, ModulusSize);
-			}
-			else if (hasPrivateInfo)
-			{
-				return new RSAxParameters(modulus, exponent, d, ModulusSize);
-			}
-			else if (hasPublicInfo)
-			{
-				return new RSAxParameters(modulus, exponent, ModulusSize);
-			}
+				return new RSAxParameters(modulus, exponent, d, p, q, dp, dq, inverseQ, modulusSize);
+
+			if (hasPrivateInfo)
+				return new RSAxParameters(modulus, exponent, d, modulusSize);
+
+			if (hasPublicInfo)
+				return new RSAxParameters(modulus, exponent, modulusSize);
 
 			throw new Exception("Could not process XMLKeyInfo. Incomplete key information.");
-
-			
 		}
 
 		/// <summary>
@@ -151,16 +138,13 @@ namespace ArpanTECH
 			{
 				throw new ArgumentException("XOR: Parameter length mismatch");
 			}
-			else
-			{
-				byte[] R = new byte[A.Length];
 
-				for (int i = 0; i < A.Length; i++)
-				{
-					R[i] = (byte)(A[i] ^ B[i]);
-				}
-				return R;
+			byte[] r = new byte[A.Length];
+			for (int i = 0; i < A.Length; i++)
+			{
+				r[i] = (byte)(A[i] ^ B[i]);
 			}
+			return r;
 		}
 
 		internal static void FixByteArraySign(ref byte[] bytes)
@@ -173,7 +157,5 @@ namespace ArpanTECH
 				Array.Copy(temp, bytes, temp.Length);
 			}
 		}
-
-
 	}
 }
