@@ -34,8 +34,8 @@
 		<TextBox Grid.Row="3" Grid.Column="2" Margin="5" Text="{Binding TextCrypt}" AcceptsReturn="True" AcceptsTab="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" TextWrapping="Wrap" />
 
 		<StackPanel Grid.Row="3" Grid.Column="1">
-			<Button Content="-- Encrypt --&gt;"  Margin="5" Click="{mext:EventBinding EncryptCommand}" />
-			<Button Content="&lt;-- Dencrypt --" Margin="5" Click="{mext:EventBinding DecryptCommand}" />
+			<Button Content="-- Encrypt --&gt;" Margin="5" Padding="4,2" Click="{mext:EventBinding EncryptCommand}" />
+			<Button Content="&lt;-- Decrypt --" Margin="5" Padding="4,2" Click="{mext:EventBinding DecryptCommand}" />
 		</StackPanel>
 
 		<CheckBox Grid.Column="0" Grid.Row="4" IsChecked="{Binding InvertPPK}" Content="Encrypt with private Key" ToolTip="Use private key for encryption and public key for decryption" Margin="5" />
