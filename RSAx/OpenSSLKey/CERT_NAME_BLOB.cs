@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace ArpanTECH
+namespace ArpanTECH.OpenSSLKey
 {
 	[StructLayout(LayoutKind.Sequential)]
 	public struct CERT_NAME_BLOB

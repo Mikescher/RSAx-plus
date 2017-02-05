@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace ArpanTECH
+namespace ArpanTECH.OpenSSLKey
 {
 	[StructLayout(LayoutKind.Sequential)]
 	public struct CRYPT_KEY_PROV_INFO

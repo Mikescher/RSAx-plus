@@ -1,5 +1,8 @@
-﻿using MSHC.MVVM;
+﻿using ArpanTECH.OpenSSLKey;
+using MSHC.MVVM;
+using System;
 using System.Windows.Input;
+using System.Xml.Linq;
 
 namespace RSAx_Toolkit
 {
@@ -12,16 +15,32 @@ namespace RSAx_Toolkit
 		public string TextXML { get { return _textXML; } set { _textXML = value; OnPropertyChanged(); } }
 
 		public ICommand XML2PEMCommand => new RelayCommand(ConvertToPEM);
-		public ICommand PEM2XMLCommand => new RelayCommand(ConvertTOXML);
+		public ICommand PEM2XMLCommand => new RelayCommand(ConvertToXML);
 
 		private void ConvertToPEM()
 		{
 
 		}
 
-		private void ConvertTOXML()
+		private void ConvertToXML()
 		{
+			try
+			{
+				var key = OpenSSLKey.PEMKeyToXMLKey(TextPEM, "");
 
+				if (key.KeyPrivate == null)
+				{
+					TextXML = XDocument.Parse(key.KeyPublic).ToString();
+				}
+				else
+				{
+					TextXML = XDocument.Parse(key.KeyPrivate).ToString();
+				}
+			}
+			catch (Exception e)
+			{
+				TextXML = e.ToString();
+			}
 		}
 	}
 }

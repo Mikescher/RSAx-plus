@@ -46,471 +46,229 @@ THE SOFTWARE.
 // See also: 
 //  http://www.openssl.org/docs/crypto/pem.html#PEM_ENCRYPTION_FORMAT 
 //**************************************************************************************
-
 using System;
-using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
-namespace ArpanTECH
+namespace ArpanTECH.OpenSSLKey
 {
-	public class Opensslkey
+	public static class OpenSSLKey
 	{
-		public static Action<string> WriteLine = s => { };
+		private const string PEMPrivHeader = "-----BEGIN RSA PRIVATE KEY-----";
+		private const string PEMPrivFooter = "-----END RSA PRIVATE KEY-----";
 
-		private const string pemprivheader = "-----BEGIN RSA PRIVATE KEY-----";
-		private const string pemprivfooter = "-----END RSA PRIVATE KEY-----";
-		private const string pempubheader = "-----BEGIN PUBLIC KEY-----";
-		private const string pempubfooter = "-----END PUBLIC KEY-----";
-		private const string pemp8header = "-----BEGIN PRIVATE KEY-----";
-		private const string pemp8footer = "-----END PRIVATE KEY-----";
-		private const string pemp8encheader = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
-		private const string pemp8encfooter = "-----END ENCRYPTED PRIVATE KEY-----";
+		private const string PEMPubHeader = "-----BEGIN PUBLIC KEY-----";
+		private const string PEMPubFooter = "-----END PUBLIC KEY-----";
 
-		// static byte[] pempublickey;
-		// static byte[] pemprivatekey;
-		// static byte[] pkcs8privatekey;
-		// static byte[] pkcs8encprivatekey;
+		private const string PEMP8Header = "-----BEGIN PRIVATE KEY-----";
+		private const string PEMP8Footer = "-----END PRIVATE KEY-----";
 
-		public static bool verbose = false;
+		private const string PEMP8EncHeader = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
+		private const string PEMP8EncFooter = "-----END ENCRYPTED PRIVATE KEY-----";
 
-		private static void WriteToOutput(string fmt, params object[] args)
+		/// <summary>
+		/// Decode PEM pubic, private or pkcs8 key
+		/// </summary>
+		public static RsaXmlKey PEMKeyToXMLKey(string pemstr, string pw)
 		{
-			WriteLine(string.Format(fmt, args));
+			if (pemstr.StartsWith(PEMPubHeader) && pemstr.EndsWith(PEMPubFooter))
+			{
+				var pempublickey = DecodeOpenSSLPublicKey(pemstr);
+				if (pempublickey == null) throw new Exception("DecodeOpenSSLPublicKey failed");
+
+				RSACryptoServiceProvider rsa = DecodeX509PublicKey(pempublickey);
+				if (rsa == null) throw new Exception("DecodeX509PublicKey failed");
+
+				var xmlpublickey = rsa.ToXmlString(false);
+				return new RsaXmlKey(xmlpublickey, rsa.KeySize);
+			}
+			
+			if (pemstr.StartsWith(PEMPrivHeader) && pemstr.EndsWith(PEMPrivFooter))
+			{
+				var pemprivatekey = DecodeOpenSSLPrivateKey(pemstr, pw);
+				if (pemprivatekey == null) throw new Exception("DecodeOpenSSLPrivateKey failed");
+
+				RSACryptoServiceProvider rsa = DecodeRSAPrivateKey(pemprivatekey);
+				if (rsa == null) throw new Exception("DecodeRSAPrivateKey failed");
+
+				var xmlprivatekey = rsa.ToXmlString(true);
+				var xmlpublickey = rsa.ToXmlString(false);
+
+				return new RsaXmlKey(xmlpublickey, xmlprivatekey, rsa.KeySize);
+			}
+			
+			if (pemstr.StartsWith(PEMP8Header) && pemstr.EndsWith(PEMP8Footer))
+			{
+				var pkcs8Privatekey = DecodePkcs8PrivateKey(pemstr);
+				if (pkcs8Privatekey == null) throw new Exception("DecodePkcs8PrivateKey failed");
+
+				RSACryptoServiceProvider rsa = DecodePrivateKeyInfo(pkcs8Privatekey);
+				if (rsa == null) throw new Exception("DecodePrivateKeyInfo failed");
+
+				var xmlprivatekey = rsa.ToXmlString(true);
+				var xmlpublickey = rsa.ToXmlString(false);
+				return new RsaXmlKey(xmlpublickey, xmlprivatekey, rsa.KeySize);
+			}
+			
+			if (pemstr.StartsWith(PEMP8EncHeader) && pemstr.EndsWith(PEMP8EncFooter))
+			{
+				var pkcs8Encprivatekey = DecodePkcs8EncPrivateKey(pemstr);
+				if (pkcs8Encprivatekey == null) throw new Exception("DecodePkcs8EncPrivateKey failed");
+
+				RSACryptoServiceProvider rsa = DecodeEncryptedPrivateKeyInfo(pkcs8Encprivatekey, pw);
+				if (rsa == null) throw new Exception("DecodeEncryptedPrivateKeyInfo failed");
+
+				var xmlprivatekey = rsa.ToXmlString(true);
+				var xmlpublickey = rsa.ToXmlString(false);
+				return new RsaXmlKey(xmlpublickey, xmlprivatekey, rsa.KeySize);
+			}
+
+			throw new Exception("Not a PEM public, private key or a PKCS #8");
 		}
 
-		public static void Main(String[] args)
+		/// <summary>
+		/// Get the binary PKCS #8 PRIVATE key
+		/// </summary>
+		private static byte[] DecodePkcs8PrivateKey(string instr)
 		{
-
-			if (args.Length == 1)
-				if (args[0].ToUpper() == "V")
-					verbose = true;
-
-			Console.ForegroundColor = ConsoleColor.Gray;
-			Console.Write("\nRSA public, private or PKCS #8  key file to decode: ");
-			String filename = Console.ReadLine().Trim();
-			if (filename == "")  //exit while(true) loop
-				return;
-			if (!File.Exists(filename))
-			{
-				WriteToOutput("File \"{0}\" does not exist!\n", filename);
-				return;
-			}
-
-			StreamReader sr = File.OpenText(filename);
-			String pemstr = sr.ReadToEnd().Trim();
-			sr.Close();
-			if (pemstr.StartsWith("-----BEGIN"))
-				DecodePEMKey(pemstr);
-			else
-				DecodeDERKey(filename);
-		}
-
-
-
-
-
-		// ------- Decode PEM pubic, private or pkcs8 key ----------------
-		public static void DecodePEMKey(String pemstr)
-		{
-			byte[] pempublickey;
-			byte[] pemprivatekey;
-			byte[] pkcs8privatekey;
-			byte[] pkcs8encprivatekey;
-
-			if (pemstr.StartsWith(pempubheader) && pemstr.EndsWith(pempubfooter))
-			{
-				WriteToOutput("Trying to decode and parse a PEM public key ..");
-				pempublickey = DecodeOpenSSLPublicKey(pemstr);
-				if (pempublickey != null)
-				{
-					if (verbose)
-						showBytes("\nRSA public key", pempublickey);
-					//PutFileBytes("rsapubkey.pem", pempublickey, pempublickey.Length) ;
-					RSACryptoServiceProvider rsa = DecodeX509PublicKey(pempublickey);
-					WriteToOutput("\nCreated an RSACryptoServiceProvider instance\n");
-					String xmlpublickey = rsa.ToXmlString(false);
-					WriteToOutput("\nXML RSA public key:  {0} bits\n{1}\n", rsa.KeySize, xmlpublickey);
-				}
-			}
-
-
-
-
-			else if (pemstr.StartsWith(pemprivheader) && pemstr.EndsWith(pemprivfooter))
-			{
-				WriteToOutput("Trying to decrypt and parse a PEM private key ..");
-				pemprivatekey = DecodeOpenSSLPrivateKey(pemstr);
-				if (pemprivatekey != null)
-				{
-					if (verbose)
-						showBytes("\nRSA private key", pemprivatekey);
-					//PutFileBytes("rsaprivkey.pem", pemprivatekey, pemprivatekey.Length) ;
-					RSACryptoServiceProvider rsa = DecodeRSAPrivateKey(pemprivatekey);
-					WriteToOutput("\nCreated an RSACryptoServiceProvider instance\n");
-					String xmlprivatekey = rsa.ToXmlString(true);
-					WriteToOutput("\nXML RSA private key:  {0} bits\n{1}\n", rsa.KeySize, xmlprivatekey);
-					String xmlpublickey = rsa.ToXmlString(false);
-					WriteToOutput("\nXML RSA public key:  {0} bits\n{1}\n", rsa.KeySize, xmlpublickey);
-					ProcessRSA(rsa);
-				}
-			}
-
-
-
-			else if (pemstr.StartsWith(pemp8header) && pemstr.EndsWith(pemp8footer))
-			{
-				WriteToOutput("Trying to decode and parse as PEM PKCS #8 PrivateKeyInfo ..");
-				pkcs8privatekey = DecodePkcs8PrivateKey(pemstr);
-				if (pkcs8privatekey != null)
-				{
-					if (verbose)
-						showBytes("\nPKCS #8 PrivateKeyInfo", pkcs8privatekey);
-					//PutFileBytes("PrivateKeyInfo", pkcs8privatekey, pkcs8privatekey.Length) ;
-					RSACryptoServiceProvider rsa = DecodePrivateKeyInfo(pkcs8privatekey);
-					if (rsa != null)
-					{
-						WriteToOutput("\nCreated an RSACryptoServiceProvider instance\n");
-						String xmlprivatekey = rsa.ToXmlString(true);
-						WriteToOutput("\nXML RSA private key:  {0} bits\n{1}\n", rsa.KeySize, xmlprivatekey);
-						String xmlpublickey = rsa.ToXmlString(false);
-						WriteToOutput("\nXML RSA public key:  {0} bits\n{1}\n", rsa.KeySize, xmlpublickey);
-						ProcessRSA(rsa);
-					}
-					else
-						WriteToOutput("\nFailed to create an RSACryptoServiceProvider");
-				}
-			}
-
-
-			else if (pemstr.StartsWith(pemp8encheader) && pemstr.EndsWith(pemp8encfooter))
-			{
-				WriteToOutput("Trying to decode and parse as PEM PKCS #8 EncryptedPrivateKeyInfo ..");
-				pkcs8encprivatekey = DecodePkcs8EncPrivateKey(pemstr);
-				if (pkcs8encprivatekey != null)
-				{
-					if (verbose)
-						showBytes("\nPKCS #8 EncryptedPrivateKeyInfo", pkcs8encprivatekey);
-					//PutFileBytes("EncryptedPrivateKeyInfo", pkcs8encprivatekey, pkcs8encprivatekey.Length) ;
-					RSACryptoServiceProvider rsa = DecodeEncryptedPrivateKeyInfo(pkcs8encprivatekey);
-					if (rsa != null)
-					{
-						WriteToOutput("\nCreated an RSACryptoServiceProvider instance\n");
-						String xmlprivatekey = rsa.ToXmlString(true);
-						WriteToOutput("\nXML RSA private key:  {0} bits\n{1}\n", rsa.KeySize, xmlprivatekey);
-						String xmlpublickey = rsa.ToXmlString(false);
-						WriteToOutput("\nXML RSA public key:  {0} bits\n{1}\n", rsa.KeySize, xmlpublickey);
-						ProcessRSA(rsa);
-					}
-					else
-						WriteToOutput("\nFailed to create an RSACryptoServiceProvider");
-				}
-			}
-
-
-			else
-			{
-				WriteToOutput("Not a PEM public, private key or a PKCS #8");
-				return;
-			}
-		}
-
-
-
-
-
-		// ------- Decode PEM pubic, private or pkcs8 key ----------------
-		public static void DecodeDERKey(String filename)
-		{
-			RSACryptoServiceProvider rsa = null;
-			byte[] keyblob = GetFileBytes(filename);
-			if (keyblob == null)
-				return;
-
-			rsa = DecodeX509PublicKey(keyblob);
-			if (rsa != null)
-			{
-				WriteToOutput("\nA valid SubjectPublicKeyInfo\n");
-				WriteToOutput("\nCreated an RSACryptoServiceProvider instance\n");
-				String xmlpublickey = rsa.ToXmlString(false);
-				WriteToOutput("\nXML RSA public key:  {0} bits\n{1}\n", rsa.KeySize, xmlpublickey);
-				return;
-			}
-
-			rsa = DecodeRSAPrivateKey(keyblob);
-			if (rsa != null)
-			{
-				WriteToOutput("\nA valid RSAPrivateKey\n");
-				WriteToOutput("\nCreated an RSACryptoServiceProvider instance\n");
-				String xmlprivatekey = rsa.ToXmlString(true);
-				WriteToOutput("\nXML RSA private key:  {0} bits\n{1}\n", rsa.KeySize, xmlprivatekey);
-				ProcessRSA(rsa);
-				return;
-			}
-
-			rsa = DecodePrivateKeyInfo(keyblob);    //PKCS #8 unencrypted
-			if (rsa != null)
-			{
-				WriteToOutput("\nA valid PKCS #8 PrivateKeyInfo\n");
-				WriteToOutput("\nCreated an RSACryptoServiceProvider instance\n");
-				String xmlprivatekey = rsa.ToXmlString(true);
-				WriteToOutput("\nXML RSA private key:  {0} bits\n{1}\n", rsa.KeySize, xmlprivatekey);
-				ProcessRSA(rsa);
-				return;
-			}
-
-			rsa = DecodeEncryptedPrivateKeyInfo(keyblob);   //PKCS #8 encrypted
-			if (rsa != null)
-			{
-				WriteToOutput("\nA valid PKCS #8 EncryptedPrivateKeyInfo\n");
-				WriteToOutput("\nCreated an RSACryptoServiceProvider instance\n");
-				String xmlprivatekey = rsa.ToXmlString(true);
-				WriteToOutput("\nXML RSA private key:  {0} bits\n{1}\n", rsa.KeySize, xmlprivatekey);
-				ProcessRSA(rsa);
-				return;
-			}
-			WriteToOutput("Not a binary DER public, private or PKCS #8 key");
-			return;
-		}
-
-
-
-
-
-		public static void ProcessRSA(RSACryptoServiceProvider rsa)
-		{
-			if (verbose)
-				showRSAProps(rsa);
-			Console.Write("\n\nExport RSA private key to PKCS #12 file?  (Y or N) ");
-			//String resp = Console.ReadLine().ToUpper();
-			//if (resp == "Y" || resp == "YES")
-			//	RSAtoPKCS12(rsa);
-		}
-
-
-
-
-		//--------  Generate pkcs #12 from an RSACryptoServiceProvider  ---------
-		public static void RSAtoPKCS12(RSACryptoServiceProvider rsa)
-		{
-			CspKeyContainerInfo keyInfo = rsa.CspKeyContainerInfo;
-			String keycontainer = keyInfo.KeyContainerName;
-			uint keyspec = (uint)keyInfo.KeyNumber;
-			String provider = keyInfo.ProviderName;
-			uint cspflags = 0;  //CryptoAPI Current User store;   LM would be CRYPT_MACHINE_KEYSET	= 0x00000020
-			String fname = keycontainer + ".p12";
-			//---- need to pass in rsa since underlying keycontainer is not persisted and might be deleted too quickly ---
-			byte[] pkcs12 = GetPkcs12(rsa, keycontainer, provider, keyspec, cspflags);
-			if ((pkcs12 != null) && verbose)
-				showBytes("\npkcs #12", pkcs12);
-			if (pkcs12 != null)
-			{
-				PutFileBytes(fname, pkcs12, pkcs12.Length);
-				WriteToOutput("\nWrote pkc #12 file '{0}'\n", fname);
-			}
-			else
-				WriteToOutput("\nProblem getting pkcs#12");
-		}
-
-
-
-
-		//--------   Get the binary PKCS #8 PRIVATE key   --------
-		public static byte[] DecodePkcs8PrivateKey(String instr)
-		{
-			const String pemp8header = "-----BEGIN PRIVATE KEY-----";
-			const String pemp8footer = "-----END PRIVATE KEY-----";
-			String pemstr = instr.Trim();
-			byte[] binkey;
-			if (!pemstr.StartsWith(pemp8header) || !pemstr.EndsWith(pemp8footer))
-				return null;
+			string pemstr = instr.Trim();
+			if (!pemstr.StartsWith(PEMP8Header) || !pemstr.EndsWith(PEMP8Footer)) throw new Exception("pemp8 has invalid format");
 			StringBuilder sb = new StringBuilder(pemstr);
-			sb.Replace(pemp8header, "");  //remove headers/footers, if present
-			sb.Replace(pemp8footer, "");
+			sb.Replace(PEMP8Header, "");  //remove headers/footers, if present
+			sb.Replace(PEMP8Footer, "");
 
-			String pubstr = sb.ToString().Trim();   //get string after removing leading/trailing whitespace
-
-			try
-			{
-				binkey = Convert.FromBase64String(pubstr);
-			}
-			catch (System.FormatException)
-			{       //if can't b64 decode, data is not valid
-				return null;
-			}
-			return binkey;
+			string pubstr = sb.ToString().Trim();   //get string after removing leading/trailing whitespace
+			
+			return Convert.FromBase64String(pubstr);
 		}
 
-
-		//------- Parses binary asn.1 PKCS #8 PrivateKeyInfo; returns RSACryptoServiceProvider ---
-		public static RSACryptoServiceProvider DecodePrivateKeyInfo(byte[] pkcs8)
+		/// <summary>
+		/// Parses binary asn.1 PKCS #8 PrivateKeyInfo; returns RSACryptoServiceProvider
+		/// </summary>
+		/// <param name="pkcs8"></param>
+		/// <returns></returns>
+		private static RSACryptoServiceProvider DecodePrivateKeyInfo(byte[] pkcs8)
 		{
 			// encoded OID sequence for  PKCS #1 rsaEncryption szOID_RSA_RSA = "1.2.840.113549.1.1.1"
 			// this byte[] includes the sequence byte and terminal encoded null 
-			byte[] SeqOID = { 0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01, 0x05, 0x00 };
-			byte[] seq = new byte[15];
+			byte[] seqOID = { 0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01, 0x05, 0x00 };
 			// ---------  Set up stream to read the asn.1 encoded SubjectPublicKeyInfo blob  ------
 			MemoryStream mem = new MemoryStream(pkcs8);
 			int lenstream = (int)mem.Length;
 			BinaryReader binr = new BinaryReader(mem);    //wrap Memory Stream with BinaryReader for easy reading
-			byte bt = 0;
-			ushort twobytes = 0;
 
 			try
 			{
-
-				twobytes = binr.ReadUInt16();
+				var twobytes = binr.ReadUInt16();
 				if (twobytes == 0x8130) //data read as little endian order (actual data order for Sequence is 30 81)
-					binr.ReadByte();    //advance 1 byte
+					binr.ReadByte(); //advance 1 byte
 				else if (twobytes == 0x8230)
-					binr.ReadInt16();   //advance 2 bytes
+					binr.ReadInt16(); //advance 2 bytes
 				else
-					return null;
+					throw new Exception("twobytes has invalid value");
 
-
-				bt = binr.ReadByte();
-				if (bt != 0x02)
-					return null;
+				var bt = binr.ReadByte();
+				if (bt != 0x02) throw new Exception("bt != 0x02");
 
 				twobytes = binr.ReadUInt16();
 
-				if (twobytes != 0x0001)
-					return null;
+				if (twobytes != 0x0001) throw new Exception("twobytes != 0x0001");
 
-				seq = binr.ReadBytes(15);       //read the Sequence OID
-				if (!CompareBytearrays(seq, SeqOID))    //make sure Sequence for OID is correct
-					return null;
+				var seq = binr.ReadBytes(15);
+				if (!CompareBytearrays(seq, seqOID)) //make sure Sequence for OID is correct
+					throw new Exception("seq != seqOID");
 
 				bt = binr.ReadByte();
 				if (bt != 0x04) //expect an Octet string 
-					return null;
+					throw new Exception("bt != 0x04");
 
-				bt = binr.ReadByte();       //read next byte, or next 2 bytes is  0x81 or 0x82; otherwise bt is the byte count
+				bt = binr.ReadByte(); //read next byte, or next 2 bytes is  0x81 or 0x82; otherwise bt is the byte count
 				if (bt == 0x81)
 					binr.ReadByte();
-				else
-				 if (bt == 0x82)
+				else if (bt == 0x82)
 					binr.ReadUInt16();
 				//------ at this stage, the remaining sequence should be the RSA private key
 
-				byte[] rsaprivkey = binr.ReadBytes((int)(lenstream - mem.Position));
+				byte[] rsaprivkey = binr.ReadBytes((int) (lenstream - mem.Position));
 				RSACryptoServiceProvider rsacsp = DecodeRSAPrivateKey(rsaprivkey);
 				return rsacsp;
 			}
-
-			catch (Exception)
+			finally
 			{
-				return null;
+				binr.Close();
 			}
-
-			finally { binr.Close(); }
-
 		}
 
-
-
-
-
-
-
-
-		//--------   Get the binary PKCS #8 Encrypted PRIVATE key   --------
-		public static byte[] DecodePkcs8EncPrivateKey(String instr)
+		/// <summary>
+		/// Get the binary PKCS #8 Encrypted PRIVATE key
+		/// </summary>
+		private static byte[] DecodePkcs8EncPrivateKey(string instr)
 		{
-			const String pemp8encheader = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
-			const String pemp8encfooter = "-----END ENCRYPTED PRIVATE KEY-----";
-			String pemstr = instr.Trim();
-			byte[] binkey;
-			if (!pemstr.StartsWith(pemp8encheader) || !pemstr.EndsWith(pemp8encfooter))
-				return null;
+			string pemstr = instr.Trim();
+			if (!pemstr.StartsWith(PEMP8EncHeader) || !pemstr.EndsWith(PEMP8EncFooter)) throw new Exception("PEMP8Enc has invalid format");
 			StringBuilder sb = new StringBuilder(pemstr);
-			sb.Replace(pemp8encheader, "");  //remove headers/footers, if present
-			sb.Replace(pemp8encfooter, "");
+			sb.Replace(PEMP8EncHeader, "");  //remove headers/footers, if present
+			sb.Replace(PEMP8EncFooter, "");
 
-			String pubstr = sb.ToString().Trim();   //get string after removing leading/trailing whitespace
-
-			try
-			{
-				binkey = Convert.FromBase64String(pubstr);
-			}
-			catch (System.FormatException)
-			{       //if can't b64 decode, data is not valid
-				return null;
-			}
-			return binkey;
+			string pubstr = sb.ToString().Trim();   //get string after removing leading/trailing whitespace
+			
+			return Convert.FromBase64String(pubstr);
 		}
 
-
-
-
-
-
-		//------- Parses binary asn.1 EncryptedPrivateKeyInfo; returns RSACryptoServiceProvider ---
-		public static RSACryptoServiceProvider DecodeEncryptedPrivateKeyInfo(byte[] encpkcs8)
+		/// <summary>
+		/// Parses binary asn.1 EncryptedPrivateKeyInfo; returns RSACryptoServiceProvider
+		/// </summary>
+		private static RSACryptoServiceProvider DecodeEncryptedPrivateKeyInfo(byte[] encpkcs8, string password)
 		{
 			// encoded OID sequence for  PKCS #1 rsaEncryption szOID_RSA_RSA = "1.2.840.113549.1.1.1"
 			// this byte[] includes the sequence byte and terminal encoded null 
-			byte[] OIDpkcs5PBES2 = { 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x05, 0x0D };
-			byte[] OIDpkcs5PBKDF2 = { 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x05, 0x0C };
-			byte[] OIDdesEDE3CBC = { 0x06, 0x08, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x03, 0x07 };
-			byte[] seqdes = new byte[10];
-			byte[] seq = new byte[11];
-			byte[] salt;
-			byte[] IV;
-			byte[] encryptedpkcs8;
-			byte[] pkcs8;
-
-			int saltsize, ivsize, encblobsize;
-			int iterations;
+			byte[] oidpkcs5PBES2 = { 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x05, 0x0D };
+			byte[] oidpkcs5PBKDF2 = { 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x05, 0x0C };
+			byte[] oiddesEDE3CBC = { 0x06, 0x08, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x03, 0x07 };
 
 			// ---------  Set up stream to read the asn.1 encoded SubjectPublicKeyInfo blob  ------
 			MemoryStream mem = new MemoryStream(encpkcs8);
-			int lenstream = (int)mem.Length;
 			BinaryReader binr = new BinaryReader(mem);    //wrap Memory Stream with BinaryReader for easy reading
-			byte bt = 0;
-			ushort twobytes = 0;
 
 			try
 			{
-
-				twobytes = binr.ReadUInt16();
+				var twobytes = binr.ReadUInt16();
 				if (twobytes == 0x8130) //data read as little endian order (actual data order for Sequence is 30 81)
-					binr.ReadByte();    //advance 1 byte
+					binr.ReadByte(); //advance 1 byte
 				else if (twobytes == 0x8230)
-					binr.ReadInt16();   //advance 2 bytes
+					binr.ReadInt16(); //advance 2 bytes
 				else
-					return null;
+					throw new Exception("encpkcs8 has invalid format");
 
-				twobytes = binr.ReadUInt16();   //inner sequence
+				twobytes = binr.ReadUInt16(); //inner sequence
 				if (twobytes == 0x8130)
 					binr.ReadByte();
 				else if (twobytes == 0x8230)
 					binr.ReadInt16();
 
 
-				seq = binr.ReadBytes(11);       //read the Sequence OID
-				if (!CompareBytearrays(seq, OIDpkcs5PBES2)) //is it a OIDpkcs5PBES2 ?
-					return null;
+				var seq = binr.ReadBytes(11);
+				if (!CompareBytearrays(seq, oidpkcs5PBES2)) //is it a OIDpkcs5PBES2 ?
+					throw new Exception("encpkcs8 has invalid format");
 
-				twobytes = binr.ReadUInt16();   //inner sequence for pswd salt
+				twobytes = binr.ReadUInt16(); //inner sequence for pswd salt
 				if (twobytes == 0x8130)
 					binr.ReadByte();
 				else if (twobytes == 0x8230)
 					binr.ReadInt16();
 
-				twobytes = binr.ReadUInt16();   //inner sequence for pswd salt
+				twobytes = binr.ReadUInt16(); //inner sequence for pswd salt
 				if (twobytes == 0x8130)
 					binr.ReadByte();
 				else if (twobytes == 0x8230)
 					binr.ReadInt16();
 
-				seq = binr.ReadBytes(11);       //read the Sequence OID
-				if (!CompareBytearrays(seq, OIDpkcs5PBKDF2))    //is it a OIDpkcs5PBKDF2 ?
-					return null;
+				seq = binr.ReadBytes(11); //read the Sequence OID
+				if (!CompareBytearrays(seq, oidpkcs5PBKDF2)) //is it a OIDpkcs5PBKDF2 ?
+					throw new Exception("encpkcs8 has invalid format");
 
 				twobytes = binr.ReadUInt16();
 				if (twobytes == 0x8130)
@@ -518,27 +276,25 @@ namespace ArpanTECH
 				else if (twobytes == 0x8230)
 					binr.ReadInt16();
 
-				bt = binr.ReadByte();
-				if (bt != 0x04)     //expect octet string for salt
-					return null;
-				saltsize = binr.ReadByte();
-				salt = binr.ReadBytes(saltsize);
+				var bt = binr.ReadByte();
+				if (bt != 0x04) //expect octet string for salt
+					throw new Exception("encpkcs8 has invalid format");
 
-				if (verbose)
-					showBytes("Salt for pbkd", salt);
-				bt = binr.ReadByte();
-				if (bt != 0x02)     //expect an integer for PBKF2 interation count
-					return null;
+				int saltsize = binr.ReadByte();
+				var salt = binr.ReadBytes(saltsize);
 
-				int itbytes = binr.ReadByte();  //PBKD2 iterations should fit in 2 bytes.
+				bt = binr.ReadByte();
+				if (bt != 0x02) //expect an integer for PBKF2 interation count
+					throw new Exception("encpkcs8 has invalid format");
+
+				int itbytes = binr.ReadByte(); //PBKD2 iterations should fit in 2 bytes.
+				int iterations;
 				if (itbytes == 1)
 					iterations = binr.ReadByte();
 				else if (itbytes == 2)
 					iterations = 256 * binr.ReadByte() + binr.ReadByte();
 				else
-					return null;
-				if (verbose)
-					WriteToOutput("PBKD2 iterations {0}", iterations);
+					throw new Exception("encpkcs8 has invalid format");
 
 				twobytes = binr.ReadUInt16();
 				if (twobytes == 0x8130)
@@ -547,343 +303,277 @@ namespace ArpanTECH
 					binr.ReadInt16();
 
 
-				seqdes = binr.ReadBytes(10);        //read the Sequence OID
-				if (!CompareBytearrays(seqdes, OIDdesEDE3CBC))  //is it a OIDdes-EDE3-CBC ?
-					return null;
+				var seqdes = binr.ReadBytes(10);
+				if (!CompareBytearrays(seqdes, oiddesEDE3CBC)) //is it a OIDdes-EDE3-CBC ?
+					throw new Exception("encpkcs8 has invalid format");
 
 				bt = binr.ReadByte();
-				if (bt != 0x04)     //expect octet string for IV
-					return null;
-				ivsize = binr.ReadByte();   // IV byte size should fit in one byte (24 expected for 3DES)
-				IV = binr.ReadBytes(ivsize);
-				if (verbose)
-					showBytes("IV for des-EDE3-CBC", IV);
+				if (bt != 0x04) //expect octet string for IV
+					throw new Exception("encpkcs8 has invalid format");
+
+				int ivsize = binr.ReadByte();
+				var iv = binr.ReadBytes(ivsize);
 
 				bt = binr.ReadByte();
-				if (bt != 0x04)     // expect octet string for encrypted PKCS8 data
-					return null;
+				if (bt != 0x04) // expect octet string for encrypted PKCS8 data
+					throw new Exception("encpkcs8 has invalid format");
 
 
 				bt = binr.ReadByte();
 
+				int encblobsize;
 				if (bt == 0x81)
-					encblobsize = binr.ReadByte();  // data size in next byte
+					encblobsize = binr.ReadByte(); // data size in next byte
 				else if (bt == 0x82)
 					encblobsize = 256 * binr.ReadByte() + binr.ReadByte();
 				else
-					encblobsize = bt;       // we already have the data size
+					encblobsize = bt; // we already have the data size
 
+				var encryptedpkcs8 = binr.ReadBytes(encblobsize);
 
-				encryptedpkcs8 = binr.ReadBytes(encblobsize);
-				//if(verbose)
-				//	showBytes("Encrypted PKCS8 blob", encryptedpkcs8) ;
+				var pkcs8 = DecryptPBDK2(encryptedpkcs8, salt, iv, MakeStringSecure(password), iterations);
 
-
-				SecureString secpswd = GetSecPswd("Enter password for Encrypted PKCS #8 ==>");
-				pkcs8 = DecryptPBDK2(encryptedpkcs8, salt, IV, secpswd, iterations);
-				if (pkcs8 == null)  // probably a bad pswd entered.
-					return null;
-
-				//if(verbose)
-				//	showBytes("Decrypted PKCS #8", pkcs8) ;
 				//----- With a decrypted pkcs #8 PrivateKeyInfo blob, decode it to an RSA ---
 				RSACryptoServiceProvider rsa = DecodePrivateKeyInfo(pkcs8);
 				return rsa;
 			}
-
-			catch (Exception)
+			finally
 			{
-				return null;
+				binr.Close();
 			}
-
-			finally { binr.Close(); }
-
-
 		}
 
-
-
-
-
-		//  ------  Uses PBKD2 to derive a 3DES key and decrypts data --------
-		public static byte[] DecryptPBDK2(byte[] edata, byte[] salt, byte[] IV, SecureString secpswd, int iterations)
+		/// <summary>
+		/// Uses PBKD2 to derive a 3DES key and decrypts data
+		/// </summary>
+		private static byte[] DecryptPBDK2(byte[] edata, byte[] salt, byte[] iv, SecureString secpswd, int iterations)
 		{
-			CryptoStream decrypt = null;
-
-			IntPtr unmanagedPswd = IntPtr.Zero;
 			byte[] psbytes = new byte[secpswd.Length];
-			unmanagedPswd = Marshal.SecureStringToGlobalAllocAnsi(secpswd);
+			var unmanagedPswd = Marshal.SecureStringToGlobalAllocAnsi(secpswd);
 			Marshal.Copy(unmanagedPswd, psbytes, 0, psbytes.Length);
 			Marshal.ZeroFreeGlobalAllocAnsi(unmanagedPswd);
 
-			try
-			{
-				Rfc2898DeriveBytes kd = new Rfc2898DeriveBytes(psbytes, salt, iterations);
-				TripleDES decAlg = TripleDES.Create();
-				decAlg.Key = kd.GetBytes(24);
-				decAlg.IV = IV;
-				MemoryStream memstr = new MemoryStream();
-				decrypt = new CryptoStream(memstr, decAlg.CreateDecryptor(), CryptoStreamMode.Write);
-				decrypt.Write(edata, 0, edata.Length);
-				decrypt.Flush();
-				decrypt.Close();    // this is REQUIRED.
-				byte[] cleartext = memstr.ToArray();
-				return cleartext;
-			}
-			catch (Exception e)
-			{
-				WriteToOutput("Problem decrypting: {0}", e.Message);
-				return null;
-			}
+			Rfc2898DeriveBytes kd = new Rfc2898DeriveBytes(psbytes, salt, iterations);
+			TripleDES decAlg = TripleDES.Create();
+			decAlg.Key = kd.GetBytes(24);
+			decAlg.IV = iv;
+			MemoryStream memstr = new MemoryStream();
+			var decrypt = new CryptoStream(memstr, decAlg.CreateDecryptor(), CryptoStreamMode.Write);
+			decrypt.Write(edata, 0, edata.Length);
+			decrypt.Flush();
+			decrypt.Close();    // this is REQUIRED.
+			byte[] cleartext = memstr.ToArray();
+			return cleartext;
 		}
 
-
-
-
-
-
-
-
-
-
-		//--------   Get the binary RSA PUBLIC key   --------
-		public static byte[] DecodeOpenSSLPublicKey(String instr)
+		/// <summary>
+		/// Get the binary RSA PUBLIC key
+		/// </summary>
+		private static byte[] DecodeOpenSSLPublicKey(string instr)
 		{
-			const String pempubheader = "-----BEGIN PUBLIC KEY-----";
-			const String pempubfooter = "-----END PUBLIC KEY-----";
-			String pemstr = instr.Trim();
-			byte[] binkey;
-			if (!pemstr.StartsWith(pempubheader) || !pemstr.EndsWith(pempubfooter))
-				return null;
+			string pemstr = instr.Trim();
+			if (!pemstr.StartsWith(PEMPubHeader) || !pemstr.EndsWith(PEMPubFooter)) throw new Exception("PEM-public-key has invalid format");
 			StringBuilder sb = new StringBuilder(pemstr);
-			sb.Replace(pempubheader, "");  //remove headers/footers, if present
-			sb.Replace(pempubfooter, "");
+			sb.Replace(PEMPubHeader, "");  //remove headers/footers, if present
+			sb.Replace(PEMPubFooter, "");
 
-			String pubstr = sb.ToString().Trim();   //get string after removing leading/trailing whitespace
-
-			try
-			{
-				binkey = Convert.FromBase64String(pubstr);
-			}
-			catch (System.FormatException)
-			{       //if can't b64 decode, data is not valid
-				return null;
-			}
-			return binkey;
+			string pubstr = sb.ToString().Trim();   //get string after removing leading/trailing whitespace
+			
+			return Convert.FromBase64String(pubstr);
 		}
 
-
-
-		//------- Parses binary asn.1 X509 SubjectPublicKeyInfo; returns RSACryptoServiceProvider ---
-		public static RSACryptoServiceProvider DecodeX509PublicKey(byte[] x509key)
+		/// <summary>
+		/// Parses binary asn.1 X509 SubjectPublicKeyInfo; returns RSACryptoServiceProvider
+		/// </summary>
+		private static RSACryptoServiceProvider DecodeX509PublicKey(byte[] x509Key)
 		{
 			// encoded OID sequence for  PKCS #1 rsaEncryption szOID_RSA_RSA = "1.2.840.113549.1.1.1"
-			byte[] SeqOID = { 0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01, 0x05, 0x00 };
-			byte[] seq = new byte[15];
+			byte[] seqOID = { 0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01, 0x05, 0x00 };
 			// ---------  Set up stream to read the asn.1 encoded SubjectPublicKeyInfo blob  ------
-			MemoryStream mem = new MemoryStream(x509key);
+			MemoryStream mem = new MemoryStream(x509Key);
 			BinaryReader binr = new BinaryReader(mem);    //wrap Memory Stream with BinaryReader for easy reading
-			byte bt = 0;
-			ushort twobytes = 0;
 
 			try
 			{
-
-				twobytes = binr.ReadUInt16();
+				var twobytes = binr.ReadUInt16();
 				if (twobytes == 0x8130) //data read as little endian order (actual data order for Sequence is 30 81)
-					binr.ReadByte();    //advance 1 byte
+					binr.ReadByte(); //advance 1 byte
 				else if (twobytes == 0x8230)
-					binr.ReadInt16();   //advance 2 bytes
+					binr.ReadInt16(); //advance 2 bytes
 				else
-					return null;
+					throw new Exception("x509Key has invalid format");
 
-				seq = binr.ReadBytes(15);       //read the Sequence OID
-				if (!CompareBytearrays(seq, SeqOID))    //make sure Sequence for OID is correct
-					return null;
+				var seq = binr.ReadBytes(15);
+				if (!CompareBytearrays(seq, seqOID)) //make sure Sequence for OID is correct
+					throw new Exception("x509Key has invalid format");
 
 				twobytes = binr.ReadUInt16();
 				if (twobytes == 0x8103) //data read as little endian order (actual data order for Bit String is 03 81)
-					binr.ReadByte();    //advance 1 byte
+					binr.ReadByte(); //advance 1 byte
 				else if (twobytes == 0x8203)
-					binr.ReadInt16();   //advance 2 bytes
+					binr.ReadInt16(); //advance 2 bytes
 				else
-					return null;
+					throw new Exception("x509Key has invalid format");
 
-				bt = binr.ReadByte();
-				if (bt != 0x00)     //expect null byte next
-					return null;
+				var bt = binr.ReadByte();
+				if (bt != 0x00) //expect null byte next
+					throw new Exception("x509Key has invalid format");
 
 				twobytes = binr.ReadUInt16();
 				if (twobytes == 0x8130) //data read as little endian order (actual data order for Sequence is 30 81)
-					binr.ReadByte();    //advance 1 byte
+					binr.ReadByte(); //advance 1 byte
 				else if (twobytes == 0x8230)
-					binr.ReadInt16();   //advance 2 bytes
+					binr.ReadInt16(); //advance 2 bytes
 				else
-					return null;
+					throw new Exception("x509Key has invalid format");
 
 				twobytes = binr.ReadUInt16();
-				byte lowbyte = 0x00;
-				byte highbyte = 0x00;
+				byte lowbyte;
+				byte highbyte;
 
 				if (twobytes == 0x8102) //data read as little endian order (actual data order for Integer is 02 81)
-					lowbyte = binr.ReadByte();  // read next bytes which is bytes in modulus
+				{
+					highbyte = 0x00;
+					lowbyte = binr.ReadByte(); // read next bytes which is bytes in modulus
+				}
 				else if (twobytes == 0x8202)
 				{
 					highbyte = binr.ReadByte(); //advance 2 bytes
 					lowbyte = binr.ReadByte();
 				}
 				else
-					return null;
-				byte[] modint = { lowbyte, highbyte, 0x00, 0x00 };   //reverse byte order since asn.1 key uses big endian order
+				{
+					throw new Exception("x509Key has invalid format");
+				}
+
+				byte[] modint = {lowbyte, highbyte, 0x00, 0x00}; //reverse byte order since asn.1 key uses big endian order
 				int modsize = BitConverter.ToInt32(modint, 0);
 
 				byte firstbyte = binr.ReadByte();
 				binr.BaseStream.Seek(-1, SeekOrigin.Current);
 
 				if (firstbyte == 0x00)
-				{   //if first byte (highest order) of modulus is zero, don't include it
-					binr.ReadByte();    //skip this null byte
-					modsize -= 1;   //reduce modulus buffer size by 1
+				{
+					//if first byte (highest order) of modulus is zero, don't include it
+					binr.ReadByte(); //skip this null byte
+					modsize -= 1; //reduce modulus buffer size by 1
 				}
 
-				byte[] modulus = binr.ReadBytes(modsize);   //read the modulus bytes
+				byte[] modulus = binr.ReadBytes(modsize); //read the modulus bytes
 
-				if (binr.ReadByte() != 0x02)            //expect an Integer for the exponent data
-					return null;
-				int expbytes = (int)binr.ReadByte();        // should only need one byte for actual exponent data (for all useful values)
+				if (binr.ReadByte() != 0x02) //expect an Integer for the exponent data
+					throw new Exception("x509Key has invalid format");
+
+				int expbytes = binr.ReadByte(); // should only need one byte for actual exponent data (for all useful values)
 				byte[] exponent = binr.ReadBytes(expbytes);
 
-
-				showBytes("\nExponent", exponent);
-				showBytes("\nModulus", modulus);
-
 				// ------- create RSACryptoServiceProvider instance and initialize with public key -----
-				RSACryptoServiceProvider RSA = new RSACryptoServiceProvider();
-				RSAParameters RSAKeyInfo = new RSAParameters();
-				RSAKeyInfo.Modulus = modulus;
-				RSAKeyInfo.Exponent = exponent;
-				RSA.ImportParameters(RSAKeyInfo);
-				return RSA;
+				RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
+				RSAParameters rsaKeyInfo = new RSAParameters
+				{
+					Modulus = modulus,
+					Exponent = exponent
+				};
+				rsa.ImportParameters(rsaKeyInfo);
+				return rsa;
 			}
-			catch (Exception e)
+			finally
 			{
-				return null;
+				binr.Close();
 			}
-
-			finally { binr.Close(); }
 
 		}
 
-
-
-		//------- Parses binary ans.1 RSA private key; returns RSACryptoServiceProvider  ---
-		public static RSACryptoServiceProvider DecodeRSAPrivateKey(byte[] privkey)
+		/// <summary>
+		/// Parses binary ans.1 RSA private key; returns RSACryptoServiceProvider
+		/// </summary>
+		private static RSACryptoServiceProvider DecodeRSAPrivateKey(byte[] privkey)
 		{
-			byte[] MODULUS, E, D, P, Q, DP, DQ, IQ;
-
 			// ---------  Set up stream to decode the asn.1 encoded RSA private key  ------
 			MemoryStream mem = new MemoryStream(privkey);
 			BinaryReader binr = new BinaryReader(mem);    //wrap Memory Stream with BinaryReader for easy reading
-			byte bt = 0;
-			ushort twobytes = 0;
-			int elems = 0;
 			try
 			{
-				twobytes = binr.ReadUInt16();
+				var twobytes = binr.ReadUInt16();
 				if (twobytes == 0x8130) //data read as little endian order (actual data order for Sequence is 30 81)
-					binr.ReadByte();    //advance 1 byte
+					binr.ReadByte(); //advance 1 byte
 				else if (twobytes == 0x8230)
-					binr.ReadInt16();   //advance 2 bytes
+					binr.ReadInt16(); //advance 2 bytes
 				else
-					return null;
+					throw new Exception("rsa-private-key has invalid format");
 
 				twobytes = binr.ReadUInt16();
 				if (twobytes != 0x0102) //version number
-					return null;
-				bt = binr.ReadByte();
+					throw new Exception("rsa-private-key has invalid version");
+
+				var bt = binr.ReadByte();
 				if (bt != 0x00)
-					return null;
+					throw new Exception("rsa-private-key has invalid format");
 
 
 				//------  all private key components are Integer sequences ----
-				elems = GetIntegerSize(binr);
-				MODULUS = binr.ReadBytes(elems);
+				var elems = GetIntegerSize(binr);
+				var modulus = binr.ReadBytes(elems);
 
 				elems = GetIntegerSize(binr);
-				E = binr.ReadBytes(elems);
+				var e = binr.ReadBytes(elems);
 
 				elems = GetIntegerSize(binr);
-				D = binr.ReadBytes(elems);
+				var d = binr.ReadBytes(elems);
 
 				elems = GetIntegerSize(binr);
-				P = binr.ReadBytes(elems);
+				var p = binr.ReadBytes(elems);
 
 				elems = GetIntegerSize(binr);
-				Q = binr.ReadBytes(elems);
+				var q = binr.ReadBytes(elems);
 
 				elems = GetIntegerSize(binr);
-				DP = binr.ReadBytes(elems);
+				var dp = binr.ReadBytes(elems);
 
 				elems = GetIntegerSize(binr);
-				DQ = binr.ReadBytes(elems);
+				var dq = binr.ReadBytes(elems);
 
 				elems = GetIntegerSize(binr);
-				IQ = binr.ReadBytes(elems);
-
-				WriteToOutput("showing components ..");
-				if (verbose)
-				{
-					showBytes("\nModulus", MODULUS);
-					showBytes("\nExponent", E);
-					showBytes("\nD", D);
-					showBytes("\nP", P);
-					showBytes("\nQ", Q);
-					showBytes("\nDP", DP);
-					showBytes("\nDQ", DQ);
-					showBytes("\nIQ", IQ);
-				}
+				var iq = binr.ReadBytes(elems);
 
 				// ------- create RSACryptoServiceProvider instance and initialize with public key -----
-				RSACryptoServiceProvider RSA = new RSACryptoServiceProvider();
-				RSAParameters RSAparams = new RSAParameters();
-				RSAparams.Modulus = MODULUS;
-				RSAparams.Exponent = E;
-				RSAparams.D = D;
-				RSAparams.P = P;
-				RSAparams.Q = Q;
-				RSAparams.DP = DP;
-				RSAparams.DQ = DQ;
-				RSAparams.InverseQ = IQ;
-				RSA.ImportParameters(RSAparams);
-				return RSA;
+				RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
+				RSAParameters rsAparams = new RSAParameters
+				{
+					Modulus = modulus,
+					Exponent = e,
+					D = d,
+					P = p,
+					Q = q,
+					DP = dp,
+					DQ = dq,
+					InverseQ = iq
+				};
+				rsa.ImportParameters(rsAparams);
+				return rsa;
 			}
-			catch (Exception)
+			finally
 			{
-				return null;
+				binr.Close();
 			}
-			finally { binr.Close(); }
 		}
-
-
-
+		
 		private static int GetIntegerSize(BinaryReader binr)
 		{
-			byte bt = 0;
-			byte lowbyte = 0x00;
-			byte highbyte = 0x00;
-			int count = 0;
-			bt = binr.ReadByte();
+			int count;
+			var bt = binr.ReadByte();
 			if (bt != 0x02)     //expect integer
 				return 0;
 			bt = binr.ReadByte();
 
 			if (bt == 0x81)
-				count = binr.ReadByte();    // data size in next byte
-			else
-			if (bt == 0x82)
 			{
-				highbyte = binr.ReadByte(); // data size in next 2 bytes
-				lowbyte = binr.ReadByte();
+				count = binr.ReadByte();    // data size in next byte
+			}
+			else if (bt == 0x82)
+			{
+				var highbyte = binr.ReadByte();
+				var lowbyte = binr.ReadByte();
 				byte[] modint = { lowbyte, highbyte, 0x00, 0x00 };
 				count = BitConverter.ToInt32(modint, 0);
 			}
@@ -891,9 +581,7 @@ namespace ArpanTECH
 			{
 				count = bt;     // we already have the data size
 			}
-
-
-
+			
 			while (binr.ReadByte() == 0x00)
 			{   //remove high order zeros in data
 				count -= 1;
@@ -902,122 +590,108 @@ namespace ArpanTECH
 			return count;
 		}
 
-
-
-
 		//-----  Get the binary RSA PRIVATE key, decrypting if necessary ----
-		public static byte[] DecodeOpenSSLPrivateKey(String instr)
+		private static byte[] DecodeOpenSSLPrivateKey(string instr, string password)
 		{
-			const String pemprivheader = "-----BEGIN RSA PRIVATE KEY-----";
-			const String pemprivfooter = "-----END RSA PRIVATE KEY-----";
-			String pemstr = instr.Trim();
+			string pemstr = instr.Trim();
 			byte[] binkey;
-			if (!pemstr.StartsWith(pemprivheader) || !pemstr.EndsWith(pemprivfooter))
-				return null;
+			if (!pemstr.StartsWith(PEMPrivHeader) || !pemstr.EndsWith(PEMPrivFooter)) throw new Exception("PEM-private-key has invalid format");
 
 			StringBuilder sb = new StringBuilder(pemstr);
-			sb.Replace(pemprivheader, "");  //remove headers/footers, if present
-			sb.Replace(pemprivfooter, "");
+			sb.Replace(PEMPrivHeader, "");  //remove headers/footers, if present
+			sb.Replace(PEMPrivFooter, "");
 
-			String pvkstr = sb.ToString().Trim();   //get string after removing leading/trailing whitespace
+			string pvkstr = sb.ToString().Trim();   //get string after removing leading/trailing whitespace
 
 			try
-			{        // if there are no PEM encryption info lines, this is an UNencrypted PEM private key
+			{
+				// if there are no PEM encryption info lines, this is an UNencrypted PEM private key
 				binkey = Convert.FromBase64String(pvkstr);
 				return binkey;
 			}
-			catch (System.FormatException)
-			{       //if can't b64 decode, it must be an encrypted private key
-					//WriteToOutput("Not an unencrypted OpenSSL PEM private key");  
+			catch (FormatException)
+			{
+				//if can't b64 decode, it must be an encrypted private key
+				//WriteToOutput("Not an unencrypted OpenSSL PEM private key");  
 			}
 
 			StringReader str = new StringReader(pvkstr);
 
 			//-------- read PEM encryption info. lines and extract salt -----
-			if (!str.ReadLine().StartsWith("Proc-Type: 4,ENCRYPTED"))
-				return null;
-			String saltline = str.ReadLine();
+			var procLine = str.ReadLine();
+			if (procLine == null)
+				throw new Exception("ssl-private-key has invalid format");
+			if (!procLine.StartsWith("Proc-Type: 4,ENCRYPTED"))
+				throw new Exception("ssl-private-key has invalid format");
+
+			string saltline = str.ReadLine();
+			if (saltline == null)
+				throw new Exception("ssl-private-key has invalid format");
 			if (!saltline.StartsWith("DEK-Info: DES-EDE3-CBC,"))
-				return null;
-			String saltstr = saltline.Substring(saltline.IndexOf(",") + 1).Trim();
+				throw new Exception("ssl-private-key has invalid format");
+
+			string saltstr = saltline.Substring(saltline.IndexOf(",", StringComparison.Ordinal) + 1).Trim();
 			byte[] salt = new byte[saltstr.Length / 2];
 			for (int i = 0; i < salt.Length; i++)
 				salt[i] = Convert.ToByte(saltstr.Substring(i * 2, 2), 16);
-			if (!(str.ReadLine() == ""))
-				return null;
+			if (str.ReadLine() != "")
+				throw new Exception("ssl-private-key has invalid format");
 
 			//------ remaining b64 data is encrypted RSA key ----
-			String encryptedstr = str.ReadToEnd();
+			string encryptedstr = str.ReadToEnd();
 
-			try
-			{   //should have b64 encrypted RSA key now
-				binkey = Convert.FromBase64String(encryptedstr);
-			}
-			catch (System.FormatException)
-			{  // bad b64 data.
-				return null;
-			}
+			binkey = Convert.FromBase64String(encryptedstr);
 
 			//------ Get the 3DES 24 byte key using PDK used by OpenSSL ----
 
-			SecureString despswd = GetSecPswd("Enter password to derive 3DES key==>");
 			//Console.Write("\nEnter password to derive 3DES key: ");
 			//String pswd = Console.ReadLine();
-			byte[] deskey = GetOpenSSL3deskey(salt, despswd, 1, 2);    // count=1 (for OpenSSL implementation); 2 iterations to get at least 24 bytes
-			if (deskey == null)
-				return null;
+			byte[] deskey = GetOpenSSL3DESKey(salt, MakeStringSecure(password), 1, 2);    // count=1 (for OpenSSL implementation); 2 iterations to get at least 24 bytes
 			//showBytes("3DES key", deskey) ;
 
 			//------ Decrypt the encrypted 3des-encrypted RSA private key ------
 			byte[] rsakey = DecryptKey(binkey, deskey, salt);   //OpenSSL uses salt value in PEM header also as 3DES IV
-			if (rsakey != null)
-				return rsakey;  //we have a decrypted RSA private key
-			else
-			{
-				WriteToOutput("Failed to decrypt RSA private key; probably wrong password.");
-				return null;
-			}
+			
+			return rsakey;  //we have a decrypted RSA private key
 		}
 
+		private static SecureString MakeStringSecure(string s)
+		{
+			var securePassword = new SecureString();
 
+			foreach (char c in s)
+				securePassword.AppendChar(c);
 
+			securePassword.MakeReadOnly();
+			return securePassword;
+		}
 
 		// ----- Decrypt the 3DES encrypted RSA private key ----------
 
-		public static byte[] DecryptKey(byte[] cipherData, byte[] desKey, byte[] IV)
+		private static byte[] DecryptKey(byte[] cipherData, byte[] desKey, byte[] iv)
 		{
 			MemoryStream memst = new MemoryStream();
 			TripleDES alg = TripleDES.Create();
 			alg.Key = desKey;
-			alg.IV = IV;
-			try
-			{
-				CryptoStream cs = new CryptoStream(memst, alg.CreateDecryptor(), CryptoStreamMode.Write);
-				cs.Write(cipherData, 0, cipherData.Length);
-				cs.Close();
-			}
-			catch (Exception exc)
-			{
-				WriteToOutput(exc.Message);
-				return null;
-			}
+			alg.IV = iv;
+
+			CryptoStream cs = new CryptoStream(memst, alg.CreateDecryptor(), CryptoStreamMode.Write);
+			cs.Write(cipherData, 0, cipherData.Length);
+			cs.Close();
+
 			byte[] decryptedData = memst.ToArray();
 			return decryptedData;
 		}
-
-
-
-
+		
 		//-----   OpenSSL PBKD uses only one hash cycle (count); miter is number of iterations required to build sufficient bytes ---
-		private static byte[] GetOpenSSL3deskey(byte[] salt, SecureString secpswd, int count, int miter)
+		private static byte[] GetOpenSSL3DESKey(byte[] salt, SecureString secpswd, int count, int miter)
 		{
-			IntPtr unmanagedPswd = IntPtr.Zero;
 			int HASHLENGTH = 16;    //MD5 bytes
 			byte[] keymaterial = new byte[HASHLENGTH * miter];     //to store contatenated Mi hashed results
 
 
 			byte[] psbytes = new byte[secpswd.Length];
-			unmanagedPswd = Marshal.SecureStringToGlobalAllocAnsi(secpswd);
+			var unmanagedPswd = Marshal.SecureStringToGlobalAllocAnsi(secpswd);
 			Marshal.Copy(unmanagedPswd, psbytes, 0, psbytes.Length);
 			Marshal.ZeroFreeGlobalAllocAnsi(unmanagedPswd);
 
@@ -1031,14 +705,16 @@ namespace ArpanTECH
 
 			// ---- do multi-hashing and contatenate results  D1, D2 ...  into keymaterial bytes ----
 			MD5 md5 = new MD5CryptoServiceProvider();
-			byte[] result = null;
+			byte[] result = data00;
 			byte[] hashtarget = new byte[HASHLENGTH + data00.Length];   //fixed length initial hashtarget
 
 			for (int j = 0; j < miter; j++)
 			{
 				// ----  Now hash consecutively for count times ------
 				if (j == 0)
+				{
 					result = data00;    //initialize 
+				}
 				else
 				{
 					Array.Copy(result, hashtarget, result.Length);
@@ -1064,164 +740,7 @@ namespace ArpanTECH
 
 			return deskey;
 		}
-
-
-
-
-
-
-		//------   Since we are using an RSA with nonpersisted keycontainer, must pass it in to ensure it isn't colledted  -----
-		private static byte[] GetPkcs12(RSA rsa, String keycontainer, String cspprovider, uint KEYSPEC, uint cspflags)
-		{
-			byte[] pfxblob = null;
-			IntPtr hCertCntxt = IntPtr.Zero;
-
-			String DN = "CN=Opensslkey Unsigned Certificate";
-
-			hCertCntxt = CreateUnsignedCertCntxt(keycontainer, cspprovider, KEYSPEC, cspflags, DN);
-			if (hCertCntxt == IntPtr.Zero)
-			{
-				WriteToOutput("Couldn't create an unsigned-cert\n");
-				return null;
-			}
-			try
-			{
-				X509Certificate cert = new X509Certificate(hCertCntxt); //create certificate object from cert context.
-				X509Certificate2UI.DisplayCertificate(new X509Certificate2(cert));  // display it, showing linked private key
-				SecureString pswd = GetSecPswd("Set PFX Password ==>");
-				pfxblob = cert.Export(X509ContentType.Pkcs12, pswd);
-			}
-
-			catch (Exception exc)
-			{
-				WriteToOutput("BAD RESULT" + exc.Message);
-				pfxblob = null;
-			}
-
-			rsa.Clear();
-			if (hCertCntxt != IntPtr.Zero)
-				Win32.CertFreeCertificateContext(hCertCntxt);
-			return pfxblob;
-		}
-
-
-
-
-		private static IntPtr CreateUnsignedCertCntxt(String keycontainer, String provider, uint KEYSPEC, uint cspflags, String DN)
-		{
-			const uint AT_KEYEXCHANGE = 0x00000001;
-			const uint AT_SIGNATURE = 0x00000002;
-			const uint CRYPT_MACHINE_KEYSET = 0x00000020;
-			const uint PROV_RSA_FULL = 0x00000001;
-			const String MS_DEF_PROV = "Microsoft Base Cryptographic Provider v1.0";
-			const String MS_STRONG_PROV = "Microsoft Strong Cryptographic Provider";
-			const String MS_ENHANCED_PROV = "Microsoft Enhanced Cryptographic Provider v1.0";
-			const uint CERT_CREATE_SELFSIGN_NO_SIGN = 1;
-			const uint X509_ASN_ENCODING = 0x00000001;
-			const uint CERT_X500_NAME_STR = 3;
-			IntPtr hCertCntxt = IntPtr.Zero;
-			byte[] encodedName = null;
-			uint cbName = 0;
-
-			if (provider != MS_DEF_PROV && provider != MS_STRONG_PROV && provider != MS_ENHANCED_PROV)
-				return IntPtr.Zero;
-			if (keycontainer == "")
-				return IntPtr.Zero;
-			if (KEYSPEC != AT_SIGNATURE && KEYSPEC != AT_KEYEXCHANGE)
-				return IntPtr.Zero;
-			if (cspflags != 0 && cspflags != CRYPT_MACHINE_KEYSET)   //only 0 (Current User) keyset is currently used.
-				return IntPtr.Zero;
-			if (DN == "")
-				return IntPtr.Zero;
-
-
-			if (Win32.CertStrToName(X509_ASN_ENCODING, DN, CERT_X500_NAME_STR, IntPtr.Zero, null, ref cbName, IntPtr.Zero))
-			{
-				encodedName = new byte[cbName];
-				Win32.CertStrToName(X509_ASN_ENCODING, DN, CERT_X500_NAME_STR, IntPtr.Zero, encodedName, ref cbName, IntPtr.Zero);
-			}
-
-			CERT_NAME_BLOB subjectblob = new CERT_NAME_BLOB();
-			subjectblob.pbData = Marshal.AllocHGlobal(encodedName.Length);
-			Marshal.Copy(encodedName, 0, subjectblob.pbData, encodedName.Length);
-			subjectblob.cbData = encodedName.Length;
-
-			CRYPT_KEY_PROV_INFO pInfo = new CRYPT_KEY_PROV_INFO();
-			pInfo.pwszContainerName = keycontainer;
-			pInfo.pwszProvName = provider;
-			pInfo.dwProvType = PROV_RSA_FULL;
-			pInfo.dwFlags = cspflags;
-			pInfo.cProvParam = 0;
-			pInfo.rgProvParam = IntPtr.Zero;
-			pInfo.dwKeySpec = KEYSPEC;
-
-			hCertCntxt = Win32.CertCreateSelfSignCertificate(IntPtr.Zero, ref subjectblob, CERT_CREATE_SELFSIGN_NO_SIGN, ref pInfo, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-			if (hCertCntxt == IntPtr.Zero)
-				showWin32Error(Marshal.GetLastWin32Error());
-			Marshal.FreeHGlobal(subjectblob.pbData);
-			return hCertCntxt;
-		}
-
-
-
-
-		private static SecureString GetSecPswd(String prompt)
-		{
-			SecureString password = new SecureString();
-
-			Console.ForegroundColor = ConsoleColor.Gray;
-			Console.Write(prompt);
-			Console.ForegroundColor = ConsoleColor.Magenta;
-
-			while (true)
-			{
-				ConsoleKeyInfo cki = Console.ReadKey(true);
-				if (cki.Key == ConsoleKey.Enter)
-				{
-					Console.ForegroundColor = ConsoleColor.Gray;
-					WriteToOutput("");
-					return password;
-				}
-				else if (cki.Key == ConsoleKey.Backspace)
-				{
-					// remove the last asterisk from the screen...
-					if (password.Length > 0)
-					{
-						Console.SetCursorPosition(Console.CursorLeft - 1, Console.CursorTop);
-						Console.Write(" ");
-						Console.SetCursorPosition(Console.CursorLeft - 1, Console.CursorTop);
-						password.RemoveAt(password.Length - 1);
-					}
-				}
-				else if (cki.Key == ConsoleKey.Escape)
-				{
-					Console.ForegroundColor = ConsoleColor.Gray;
-					WriteToOutput("");
-					return password;
-				}
-				else if (Char.IsLetterOrDigit(cki.KeyChar) || Char.IsSymbol(cki.KeyChar))
-				{
-					if (password.Length < 20)
-					{
-						password.AppendChar(cki.KeyChar);
-						Console.Write("*");
-					}
-					else
-					{
-						Console.Beep();
-					}
-				}
-				else
-				{
-					Console.Beep();
-				}
-			}
-		}
-
-
-
-
-
+		
 		private static bool CompareBytearrays(byte[] a, byte[] b)
 		{
 			if (a.Length != b.Length)
@@ -1235,90 +754,5 @@ namespace ArpanTECH
 			}
 			return true;
 		}
-
-
-
-		private static void showRSAProps(RSACryptoServiceProvider rsa)
-		{
-			WriteToOutput("RSA CSP key information:");
-			CspKeyContainerInfo keyInfo = rsa.CspKeyContainerInfo;
-			try { WriteToOutput("Accessible property: " + keyInfo.Accessible); } catch (Exception) { }
-			try { WriteToOutput("Exportable property: " + keyInfo.Exportable); } catch (Exception) { }
-			try { WriteToOutput("HardwareDevice property: " + keyInfo.HardwareDevice); } catch (Exception) { }
-			try { WriteToOutput("KeyContainerName property: " + keyInfo.KeyContainerName); } catch (Exception) { }
-			try { WriteToOutput("KeyNumber property: " + keyInfo.KeyNumber.ToString()); } catch (Exception) { }
-			try { WriteToOutput("MachineKeyStore property: " + keyInfo.MachineKeyStore); } catch (Exception) { }
-			try { WriteToOutput("Protected property: " + keyInfo.Protected); } catch (Exception) { }
-			try { WriteToOutput("ProviderName property: " + keyInfo.ProviderName); } catch (Exception) { }
-			try { WriteToOutput("ProviderType property: " + keyInfo.ProviderType); } catch (Exception) { }
-			try { WriteToOutput("RandomlyGenerated property: " + keyInfo.RandomlyGenerated); } catch (Exception) { }
-			try { WriteToOutput("Removable property: " + keyInfo.Removable); } catch (Exception) { }
-			try { WriteToOutput("UniqueKeyContainerName property: " + keyInfo.UniqueKeyContainerName); } catch (Exception) { }
-		}
-
-
-
-		private static void showBytes(String info, byte[] data)
-		{
-			WriteToOutput("{0}  [{1} bytes]", info, data.Length);
-			for (int i = 1; i <= data.Length; i++)
-			{
-				Console.Write("{0:X2}  ", data[i - 1]);
-				if (i % 16 == 0)
-					WriteToOutput("");
-			}
-			WriteToOutput("\n\n");
-		}
-
-
-		private static byte[] GetFileBytes(String filename)
-		{
-			if (!File.Exists(filename))
-				return null;
-			Stream stream = new FileStream(filename, FileMode.Open);
-			int datalen = (int)stream.Length;
-			byte[] filebytes = new byte[datalen];
-			stream.Seek(0, SeekOrigin.Begin);
-			stream.Read(filebytes, 0, datalen);
-			stream.Close();
-			return filebytes;
-		}
-
-
-		private static void PutFileBytes(String outfile, byte[] data, int bytes)
-		{
-			FileStream fs = null;
-			if (bytes > data.Length)
-			{
-				WriteToOutput("Too many bytes");
-				return;
-			}
-			try
-			{
-				fs = new FileStream(outfile, FileMode.Create);
-				fs.Write(data, 0, bytes);
-			}
-			catch (Exception e)
-			{
-				WriteToOutput(e.Message);
-			}
-			finally
-			{
-				fs.Close();
-			}
-		}
-
-
-
-		private static void showWin32Error(int errorcode)
-		{
-			Win32Exception myEx = new Win32Exception(errorcode);
-			Console.ForegroundColor = ConsoleColor.Red;
-			WriteToOutput("Error code:\t 0x{0:X}", myEx.ErrorCode);
-			WriteToOutput("Error message:\t {0}\n", myEx.Message);
-			Console.ForegroundColor = ConsoleColor.Gray;
-		}
-
-
 	}
 }
