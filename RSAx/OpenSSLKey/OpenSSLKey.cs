@@ -46,6 +46,7 @@ THE SOFTWARE.
 // See also: 
 //  http://www.openssl.org/docs/crypto/pem.html#PEM_ENCRYPTION_FORMAT 
 //**************************************************************************************
+
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -53,7 +54,7 @@ using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace ArpanTECH.OpenSSLKey
+namespace RSAxPlus.OpenSSLKey
 {
 	public static class OpenSSLKey
 	{
@@ -74,6 +75,8 @@ namespace ArpanTECH.OpenSSLKey
 		/// </summary>
 		public static RsaXmlKey PEMKeyToXMLKey(string pemstr, string pw)
 		{
+			pemstr = pemstr.Trim();
+
 			if (pemstr.StartsWith(PEMPubHeader) && pemstr.EndsWith(PEMPubFooter))
 			{
 				var pempublickey = DecodeOpenSSLPublicKey(pemstr);

@@ -7,7 +7,7 @@ using System;
 using System.Numerics;
 using System.Security.Cryptography;
 
-namespace ArpanTECH
+namespace RSAxPlus.ArpanTECH
 {
 	/// <summary>
 	/// Class to keep the basic RSA parameters like Keys, and other information.

@@ -1,5 +1,6 @@
-﻿using ArpanTECH.OpenSSLKey;
-using MSHC.MVVM;
+﻿using MSHC.MVVM;
+using RSAxPlus;
+using RSAxPlus.OpenSSLKey;
 using System;
 using System.Windows.Input;
 using System.Xml.Linq;
@@ -14,28 +15,52 @@ namespace RSAx_Toolkit
 		private string _textXML = "";
 		public string TextXML { get { return _textXML; } set { _textXML = value; OnPropertyChanged(); } }
 
-		public ICommand XML2PEMCommand => new RelayCommand(ConvertToPEM);
-		public ICommand PEM2XMLCommand => new RelayCommand(ConvertToXML);
+		public ICommand XML2PEMPublicCommand => new RelayCommand(ConvertPublicToPEM);
+		public ICommand XML2PEMPrivateCommand => new RelayCommand(ConvertPrivateToPEM);
+		public ICommand PEM2XMLPublicCommand => new RelayCommand(ConvertPublicToXML);
+		public ICommand PEM2XMLPrivateCommand => new RelayCommand(ConvertPrivateToXML);
 
-		private void ConvertToPEM()
-		{
-
-		}
-
-		private void ConvertToXML()
+		private void ConvertPublicToPEM()
 		{
 			try
 			{
-				var key = OpenSSLKey.PEMKeyToXMLKey(TextPEM, "");
+				TextPEM = PEMUtils.PublicXMLKeyToPEM(TextXML);
+			}
+			catch (Exception e)
+			{
+				TextPEM = e.ToString();
+			}
+		}
 
-				if (key.KeyPrivate == null)
-				{
-					TextXML = XDocument.Parse(key.KeyPublic).ToString();
-				}
-				else
-				{
-					TextXML = XDocument.Parse(key.KeyPrivate).ToString();
-				}
+		private void ConvertPrivateToPEM()
+		{
+			try
+			{
+				TextPEM = PEMUtils.PrivateXMLKeyToPEM(TextXML);
+			}
+			catch (Exception e)
+			{
+				TextPEM = e.ToString();
+			}
+		}
+
+		private void ConvertPublicToXML()
+		{
+			try
+			{
+				TextXML = XDocument.Parse(OpenSSLKey.PEMKeyToXMLKey(TextPEM, "").KeyPublic).ToString();
+			}
+			catch (Exception e)
+			{
+				TextXML = e.ToString();
+			}
+		}
+
+		private void ConvertPrivateToXML()
+		{
+			try
+			{
+				TextXML = XDocument.Parse(OpenSSLKey.PEMKeyToXMLKey(TextPEM, "").KeyPrivate).ToString();
 			}
 			catch (Exception e)
 			{

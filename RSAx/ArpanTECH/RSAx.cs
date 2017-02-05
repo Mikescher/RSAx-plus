@@ -9,7 +9,7 @@ using System.Linq;
 using System.Numerics;
 using System.Security.Cryptography;
 
-namespace ArpanTECH
+namespace RSAxPlus.ArpanTECH
 {
 	/// <summary>
 	/// The main RSAx Class

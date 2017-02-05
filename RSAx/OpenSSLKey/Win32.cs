@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace ArpanTECH.OpenSSLKey
+namespace RSAxPlus.OpenSSLKey
 {
 	public static class Win32
 	{

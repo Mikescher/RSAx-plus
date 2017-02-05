@@ -1,4 +1,4 @@
-﻿namespace ArpanTECH.OpenSSLKey
+﻿namespace RSAxPlus.OpenSSLKey
 {
 	public sealed class RsaXmlKey
 	{

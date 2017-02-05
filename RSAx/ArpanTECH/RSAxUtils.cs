@@ -7,7 +7,7 @@ using System;
 using System.Numerics;
 using System.Xml;
 
-namespace ArpanTECH
+namespace RSAxPlus.ArpanTECH
 {
 	/// <summary>
 	/// Utility class for RSAx
