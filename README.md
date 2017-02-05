@@ -5,7 +5,9 @@ forked from [RSAx](https://www.codeproject.com/articles/421656/rsa-library-with-
 
 A small library for RSA public/private key encryption in C# with a focus for compatibility with the corresponding PHP functions.
 
-Supports reading keys in the PEM format
+Contains classes and methods from [RSAx](https://www.codeproject.com/articles/421656/rsa-library-with-private-key-encryption-in-csharp), [opensslkey](http://jensign.com/opensslkey/opensslkey.cs) and [this Stackoverflow thread](http://stackoverflow.com/questions/23734792)
+
+Supports reading keys in the PEM format and XML *(via some conversion methods)*.
 
 
 ##Example
@@ -82,3 +84,18 @@ function decrypt_rsa($input) {
 	}
 </script>
 ~~~
+
+
+##TODO
+
+ - [ ] Convert PEM to XKMS (public key)
+ - [x] Convert PEM to XKMS (private key)
+ - [x] Convert XKMS to PEM (public key)
+ - [x] Convert XKMS to PEM (private key)
+ - [x] Encode with public key (OAEP)
+ - [x] Encode with private key (OAEP)
+ - [x] Encode with public key (no OAEP)
+ - [x] Encode with private key (no OAEP)
+ - [ ] Decode with private key (OAEP)
+ - [ ] Decode with private key (no OAEP)
+

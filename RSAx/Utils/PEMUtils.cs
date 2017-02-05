@@ -3,11 +3,11 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 
-namespace RSAxPlus
+namespace RSAxPlus.Utils
 {
 	public static class PEMUtils
 	{
-		public static string PrivateXMLKeyToPEM(string keyxml)
+		public static string PrivateXKMSKeyToPEM(string keyxml)
 		{
 			var rsa = new RSACryptoServiceProvider();
 			rsa.FromXmlString(keyxml);
@@ -58,7 +58,7 @@ namespace RSAxPlus
 			}
 		}
 
-		public static string PublicXMLKeyToPEM(string keyxml)
+		public static string PublicXKMSKeyToPEM(string keyxml)
 		{
 			var rsa = new RSACryptoServiceProvider();
 			rsa.FromXmlString(keyxml);

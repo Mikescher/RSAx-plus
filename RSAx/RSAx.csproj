@@ -42,12 +42,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="OpenSSLKey\CERT_NAME_BLOB.cs" />
-    <Compile Include="OpenSSLKey\CRYPT_KEY_PROV_INFO.cs" />
     <Compile Include="OpenSSLKey\OpenSSLKey.cs" />
     <Compile Include="OpenSSLKey\RsaXmlKey.cs" />
-    <Compile Include="OpenSSLKey\Win32.cs" />
-    <Compile Include="PEMUtils.cs" />
+    <Compile Include="Utils\PEMUtils.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ArpanTECH\RSAx.cs" />
     <Compile Include="ArpanTECH\RSAxParameters.cs" />

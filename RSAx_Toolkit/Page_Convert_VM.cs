@@ -1,6 +1,6 @@
 ﻿using MSHC.MVVM;
-using RSAxPlus;
 using RSAxPlus.OpenSSLKey;
+using RSAxPlus.Utils;
 using System;
 using System.Windows.Input;
 using System.Xml.Linq;
@@ -24,7 +24,7 @@ namespace RSAx_Toolkit
 		{
 			try
 			{
-				TextPEM = PEMUtils.PublicXMLKeyToPEM(TextXML);
+				TextPEM = PEMUtils.PublicXKMSKeyToPEM(TextXML);
 			}
 			catch (Exception e)
 			{
@@ -36,7 +36,7 @@ namespace RSAx_Toolkit
 		{
 			try
 			{
-				TextPEM = PEMUtils.PrivateXMLKeyToPEM(TextXML);
+				TextPEM = PEMUtils.PrivateXKMSKeyToPEM(TextXML);
 			}
 			catch (Exception e)
 			{
@@ -48,7 +48,7 @@ namespace RSAx_Toolkit
 		{
 			try
 			{
-				TextXML = XDocument.Parse(OpenSSLKey.PEMKeyToXMLKey(TextPEM, "").KeyPublic).ToString();
+				TextXML = XDocument.Parse(OpenSSLKey.PEMKeyToXKMSKey(TextPEM, "").KeyPublic).ToString();
 			}
 			catch (Exception e)
 			{
@@ -60,7 +60,7 @@ namespace RSAx_Toolkit
 		{
 			try
 			{
-				TextXML = XDocument.Parse(OpenSSLKey.PEMKeyToXMLKey(TextPEM, "").KeyPrivate).ToString();
+				TextXML = XDocument.Parse(OpenSSLKey.PEMKeyToXKMSKey(TextPEM, "").KeyPrivate).ToString();
 			}
 			catch (Exception e)
 			{

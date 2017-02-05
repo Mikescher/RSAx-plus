@@ -73,7 +73,7 @@ namespace RSAxPlus.OpenSSLKey
 		/// <summary>
 		/// Decode PEM pubic, private or pkcs8 key
 		/// </summary>
-		public static RsaXmlKey PEMKeyToXMLKey(string pemstr, string pw)
+		public static RsaXmlKey PEMKeyToXKMSKey(string pemstr, string pw)
 		{
 			pemstr = pemstr.Trim();
 
@@ -560,7 +560,10 @@ namespace RSAxPlus.OpenSSLKey
 				binr.Close();
 			}
 		}
-		
+
+		/// <summary>
+		/// GetIntegerSize from Binary Reader
+		/// </summary>
 		private static int GetIntegerSize(BinaryReader binr)
 		{
 			int count;
@@ -593,7 +596,9 @@ namespace RSAxPlus.OpenSSLKey
 			return count;
 		}
 
-		//-----  Get the binary RSA PRIVATE key, decrypting if necessary ----
+		/// <summary>
+		/// Get the binary RSA PRIVATE key, decrypting if necessary
+		/// </summary>
 		private static byte[] DecodeOpenSSLPrivateKey(string instr, string password)
 		{
 			string pemstr = instr.Trim();
@@ -658,6 +663,9 @@ namespace RSAxPlus.OpenSSLKey
 			return rsakey;  //we have a decrypted RSA private key
 		}
 
+		/// <summary>
+		/// Convert System.String to SecureString
+		/// </summary>
 		private static SecureString MakeStringSecure(string s)
 		{
 			var securePassword = new SecureString();
@@ -669,8 +677,9 @@ namespace RSAxPlus.OpenSSLKey
 			return securePassword;
 		}
 
-		// ----- Decrypt the 3DES encrypted RSA private key ----------
-
+		/// <summary>
+		/// Decrypt the 3DES encrypted RSA private key
+		/// </summary>
 		private static byte[] DecryptKey(byte[] cipherData, byte[] desKey, byte[] iv)
 		{
 			MemoryStream memst = new MemoryStream();
@@ -685,8 +694,10 @@ namespace RSAxPlus.OpenSSLKey
 			byte[] decryptedData = memst.ToArray();
 			return decryptedData;
 		}
-		
-		//-----   OpenSSL PBKD uses only one hash cycle (count); miter is number of iterations required to build sufficient bytes ---
+
+		/// <summary>
+		/// OpenSSL PBKD uses only one hash cycle (count); miter is number of iterations required to build sufficient bytes
+		/// </summary>
 		private static byte[] GetOpenSSL3DESKey(byte[] salt, SecureString secpswd, int count, int miter)
 		{
 			int HASHLENGTH = 16;    //MD5 bytes
@@ -744,6 +755,9 @@ namespace RSAxPlus.OpenSSLKey
 			return deskey;
 		}
 		
+		/// <summary>
+		/// COmpare two byte arrays
+		/// </summary>
 		private static bool CompareBytearrays(byte[] a, byte[] b)
 		{
 			if (a.Length != b.Length)

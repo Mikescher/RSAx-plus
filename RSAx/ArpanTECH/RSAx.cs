@@ -47,7 +47,7 @@ namespace RSAxPlus.ArpanTECH
 		/// <param name="pw">password</param>
 		public static RSAx CreateFromPEM(string keyInfo, string pw = "")
 		{
-			var key = OpenSSLKey.OpenSSLKey.PEMKeyToXMLKey(keyInfo, pw);
+			var key = OpenSSLKey.OpenSSLKey.PEMKeyToXKMSKey(keyInfo, pw);
 			if (key.KeyPrivate != null)
 				return new RSAx(RSAxUtils.GetRSAxParameters(key.KeyPrivate, key.KeySize), true);
 			else
@@ -258,146 +258,125 @@ namespace RSAxPlus.ArpanTECH
 		private byte[] Decrypt(byte[] message, byte [] parameters, bool usePrivate, bool fOAEP)
 		{
 			byte[] em;
-			try
+
+			if (usePrivate && UseCRTForPublicDecryption && rsaParams.HasCRTInfo)
 			{
-				if (usePrivate && UseCRTForPublicDecryption && rsaParams.HasCRTInfo)
-				{
-					em = RSADecryptPrivateCRT(message);
-				}
-				else
-				{
-					em = RSAProcess(message, usePrivate);
-				}
+				em = RSADecryptPrivateCRT(message);
 			}
-			catch (CryptographicException ex)
+			else
 			{
-				throw new CryptographicException("Exception while Decryption: " + ex.Message);
-			}
-			catch
-			{
-				throw new Exception("Exception while Decryption: ");
+				em = RSAProcess(message, usePrivate);
 			}
 
-			try
+			if (fOAEP) //DECODE OAEP
 			{
-				if (fOAEP) //DECODE OAEP
+				if (em.Length == rsaParams.OctetsInModulus && em.Length > 2 * rsaParams.HLen + 1)
 				{
-					if (em.Length == rsaParams.OctetsInModulus && em.Length > 2 * rsaParams.HLen + 1)
+					byte[] pHash = rsaParams.ComputeHash(parameters);
+					if (em[0] == 0) // RFC3447 Format : http://tools.ietf.org/html/rfc3447
 					{
-						byte[] pHash = rsaParams.ComputeHash(parameters);
-						if (em[0] == 0) // RFC3447 Format : http://tools.ietf.org/html/rfc3447
+						var maskedSeed = em.ToList().GetRange(1, rsaParams.HLen).ToArray();
+						var maskedDB = em.ToList().GetRange(1 + rsaParams.HLen, em.Length - rsaParams.HLen - 1).ToArray();
+						var seedMask = MGF(maskedDB, rsaParams.HLen);
+						var seed = RSAxUtils.XOR(maskedSeed, seedMask);
+						var dbMask = MGF(seed, rsaParams.OctetsInModulus - rsaParams.HLen - 1);
+						var db = RSAxUtils.XOR(maskedDB, dbMask);
+
+						if (db.Length >= rsaParams.HLen + 1)
 						{
-							var maskedSeed = em.ToList().GetRange(1, rsaParams.HLen).ToArray();
-							var maskedDB = em.ToList().GetRange(1 + rsaParams.HLen, em.Length - rsaParams.HLen - 1).ToArray();
-							var seedMask = MGF(maskedDB, rsaParams.HLen);
-							var seed = RSAxUtils.XOR(maskedSeed, seedMask);
-							var dbMask = MGF(seed, rsaParams.OctetsInModulus - rsaParams.HLen - 1);
-							var db = RSAxUtils.XOR(maskedDB, dbMask);
-
-							if (db.Length >= rsaParams.HLen + 1)
+							byte[] pHashInner = db.ToList().GetRange(0, rsaParams.HLen).ToArray();
+							List<byte> psM = db.ToList().GetRange(rsaParams.HLen, db.Length - rsaParams.HLen);
+							int pos = psM.IndexOf(0x01);
+							if (pos >= 0 && pos < psM.Count)
 							{
-								byte[] pHashInner = db.ToList().GetRange(0, rsaParams.HLen).ToArray();
-								List<byte> psM = db.ToList().GetRange(rsaParams.HLen, db.Length - rsaParams.HLen);
-								int pos = psM.IndexOf(0x01);
-								if (pos >= 0 && pos < psM.Count)
+								List<byte> list01M = psM.GetRange(pos, psM.Count - pos);
+								byte[] m;
+								if (list01M.Count > 1)
 								{
-									List<byte> list01M = psM.GetRange(pos, psM.Count - pos);
-									byte[] m;
-									if (list01M.Count > 1)
-									{
-										m = list01M.GetRange(1, list01M.Count - 1).ToArray();
-									}
-									else
-									{
-										m = new byte[0];
-									}
-									bool success = true;
-									for (int i = 0; i < rsaParams.HLen; i++)
-									{
-										if (pHashInner[i] != pHash[i])
-										{
-											success = false;
-											break;
-										}
-									}
-
-									if (success)
-									{
-										return m;
-									}
-
-									throw new CryptographicException("OAEP Decode Error");
+									m = list01M.GetRange(1, list01M.Count - 1).ToArray();
 								}
-								// #3: Invalid Encoded Message Length.
+								else
+								{
+									m = new byte[0];
+								}
+								bool success = true;
+								for (int i = 0; i < rsaParams.HLen; i++)
+								{
+									if (pHashInner[i] != pHash[i])
+									{
+										success = false;
+										break;
+									}
+								}
+
+								if (success)
+								{
+									return m;
+								}
+
 								throw new CryptographicException("OAEP Decode Error");
 							}
-							// #2: Invalid Encoded Message Length.
+							// #3: Invalid Encoded Message Length.
 							throw new CryptographicException("OAEP Decode Error");
 						}
-						// Standard : ftp://ftp.rsasecurity.com/pub/rsalabs/rsa_algorithm/rsa-oaep_spec.pdf
-						//OAEP : THIS STADNARD IS NOT IMPLEMENTED
+						// #2: Invalid Encoded Message Length.
 						throw new CryptographicException("OAEP Decode Error");
 					}
-					// #1: Invalid Encoded Message Length.
+					// Standard : ftp://ftp.rsasecurity.com/pub/rsalabs/rsa_algorithm/rsa-oaep_spec.pdf
+					//OAEP : THIS STADNARD IS NOT IMPLEMENTED
 					throw new CryptographicException("OAEP Decode Error");
 				}
+				// #1: Invalid Encoded Message Length.
+				throw new CryptographicException("OAEP Decode Error");
+			}
 
-				// DECODE PKCS v1.5
+			// DECODE PKCS v1.5
 
-				if (em.Length >= 11)
+			if (em.Length >= 11)
+			{
+				if (em[0] == 0x00 && em[1] == 0x02)
 				{
-					if (em[0] == 0x00 && em[1] == 0x02)
+					int startIndex = 2;
+					List<byte> ps = new List<byte>();
+					for (int i = startIndex; i < em.Length; i++)
 					{
-						int startIndex = 2;
-						List<byte> ps = new List<byte>();
-						for (int i = startIndex; i < em.Length; i++)
+						if (em[i] != 0)
 						{
-							if (em[i] != 0)
-							{
-								ps.Add(em[i]);
-							}
-							else
-							{
-								break;
-							}
+							ps.Add(em[i]);
 						}
-
-						if (ps.Count >= 8)
+						else
 						{
-							int decodedDataIndex = startIndex + ps.Count + 1;
-							if (decodedDataIndex < em.Length - 1)
-							{
-								List<byte> data = new List<byte>();
-								for (int i = decodedDataIndex; i < em.Length; i++)
-								{
-									data.Add(em[i]);
-								}
-								return data.ToArray();
-							}
-
-							return new byte[0];
-							//throw new CryptographicException("PKCS v1.5 Decode Error #4: No Data");
+							break;
 						}
-
-						// #3: Invalid Key / Invalid Random Data Length
-						throw new CryptographicException("PKCS v1.5 Decode Error");
 					}
 
-					// #2: Invalid Key / Invalid Identifiers
+					if (ps.Count >= 8)
+					{
+						int decodedDataIndex = startIndex + ps.Count + 1;
+						if (decodedDataIndex < em.Length - 1)
+						{
+							List<byte> data = new List<byte>();
+							for (int i = decodedDataIndex; i < em.Length; i++)
+							{
+								data.Add(em[i]);
+							}
+							return data.ToArray();
+						}
+
+						return new byte[0];
+						//throw new CryptographicException("PKCS v1.5 Decode Error #4: No Data");
+					}
+
+					// #3: Invalid Key / Invalid Random Data Length
 					throw new CryptographicException("PKCS v1.5 Decode Error");
 				}
 
-				// #1: Invalid Key / PKCS Encoding
+				// #2: Invalid Key / Invalid Identifiers
 				throw new CryptographicException("PKCS v1.5 Decode Error");
 			}
-			catch (CryptographicException ex)
-			{
-				throw new CryptographicException("Exception while decoding: " + ex.Message);
-			}
-			catch
-			{
-				throw new CryptographicException("Exception while decoding");
-			}
+
+			// #1: Invalid Key / PKCS Encoding
+			throw new CryptographicException("PKCS v1.5 Decode Error");
 		}
 
 		#endregion

@@ -1,4 +1,5 @@
 ﻿using MSHC.MVVM;
+using RSAxPlus.ArpanTECH;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -6,7 +7,6 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Input;
-using RSAxPlus.ArpanTECH;
 
 namespace RSAx_Toolkit
 {
@@ -52,7 +52,8 @@ namespace RSAx_Toolkit
 		{
 			try
 			{
-				RSAx rsax = new RSAx(Key, ModSize) { RSAxHashAlgorithm = HashAlgorithm };
+				RSAx rsax = RSAx.CreateFromXML(Key, ModSize);
+				rsax.RSAxHashAlgorithm = HashAlgorithm;
 
 				byte[] ct = rsax.Encrypt(Encoding.UTF8.GetBytes(TextPlain), InvertPPK, UseOAEP);
 				TextCrypt = string.Join("\r\n", GetChunks(Convert.ToBase64String(ct), 50));
@@ -67,9 +68,12 @@ namespace RSAx_Toolkit
 		{
 			try
 			{
-				RSAx rsax = new RSAx(Key, ModSize) { RSAxHashAlgorithm = HashAlgorithm };
+				RSAx rsax = RSAx.CreateFromXML(Key, ModSize);
+				rsax.RSAxHashAlgorithm = HashAlgorithm;
 
-				byte[] pt = rsax.Decrypt(Convert.FromBase64String(TextCrypt.Replace("\r", "").Replace("\n", "")), InvertPPK, UseOAEP);
+				byte[] raw = Convert.FromBase64String(TextCrypt.Replace("\r", "").Replace("\n", ""));
+
+				byte[] pt = rsax.Decrypt(raw, InvertPPK, UseOAEP);
 				TextPlain = Encoding.UTF8.GetString(pt);
 			}
 			catch (Exception ex)
@@ -98,6 +102,7 @@ namespace RSAx_Toolkit
 				{
 					yield return new string(buffer, 0, read);
 				}
+				if (read > 0) yield return new string(buffer, 0, read);
 			}
 		}
 	}
