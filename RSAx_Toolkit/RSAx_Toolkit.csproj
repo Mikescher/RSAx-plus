@@ -9,11 +9,12 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>RSAx_Toolkit</RootNamespace>
     <AssemblyName>RSAx_Toolkit</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -88,35 +89,30 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-		
-		<Compile Include="Page_Checksum.xaml.cs">
-			<DependentUpon>Page_Checksum.xaml</DependentUpon>
-		</Compile>
-		<Compile Include="Page_Checksum_VM.cs">
-			<DependentUpon>Page_Checksum.xaml</DependentUpon>
-		</Compile>
-		
-		<Compile Include="Page_Convert.xaml.cs">
-			<DependentUpon>Page_Convert.xaml</DependentUpon>
-		</Compile>
-		<Compile Include="Page_Convert_VM.cs">
-			<DependentUpon>Page_Convert.xaml</DependentUpon>
-		</Compile>
-
-		<Compile Include="Page_Crypt.xaml.cs">
-			<DependentUpon>Page_Crypt.xaml</DependentUpon>
-		</Compile>
-		<Compile Include="Page_Crypt_VM.cs">
+    <Compile Include="Page_Checksum.xaml.cs">
+      <DependentUpon>Page_Checksum.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Page_Checksum_VM.cs">
+      <DependentUpon>Page_Checksum.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Page_Convert.xaml.cs">
+      <DependentUpon>Page_Convert.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Page_Convert_VM.cs">
+      <DependentUpon>Page_Convert.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Page_Crypt.xaml.cs">
       <DependentUpon>Page_Crypt.xaml</DependentUpon>
     </Compile>
-		
+    <Compile Include="Page_Crypt_VM.cs">
+      <DependentUpon>Page_Crypt.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Page_Keygen.xaml.cs">
       <DependentUpon>Page_Keygen.xaml</DependentUpon>
     </Compile>
     <Compile Include="Page_Keygen_VM.cs">
       <DependentUpon>Page_Keygen.xaml</DependentUpon>
     </Compile>
-		
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
