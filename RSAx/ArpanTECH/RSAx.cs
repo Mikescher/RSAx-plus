@@ -23,10 +23,11 @@ namespace RSAxPlus.ArpanTECH
 		/// Initialize the RSA class.
 		/// </summary>
 		/// <param name="rsaParams">Preallocated RSAxParameters containing the required keys.</param>
-		public RSAx(RSAxParameters rsaParams)
+		/// <param name="useCRT">uses CRT for private key decryption</param>
+		private RSAx(RSAxParameters rsaParams, bool useCRT)
 		{
 			this.rsaParams = rsaParams;
-			UseCRTForPublicDecryption = true;
+			UseCRTForPublicDecryption = useCRT;
 		}
 
 		/// <summary>
@@ -34,10 +35,23 @@ namespace RSAxPlus.ArpanTECH
 		/// </summary>
 		/// <param name="keyInfo">XML Containing Key Information</param>
 		/// <param name="modulusSize">Length of RSA Modulus in bits.</param>
-		public RSAx(string keyInfo, int modulusSize)
+		public static RSAx CreateFromXML(string keyInfo, int modulusSize)
 		{
-			rsaParams = RSAxUtils.GetRSAxParameters(keyInfo, modulusSize);
-			UseCRTForPublicDecryption = true;
+			return new RSAx(RSAxUtils.GetRSAxParameters(keyInfo, modulusSize), true);
+		}
+
+		/// <summary>
+		/// Initialize the RSA class from a PEM string.
+		/// </summary>
+		/// <param name="keyInfo">PEM string</param>
+		/// <param name="pw">password</param>
+		public static RSAx CreateFromPEM(string keyInfo, string pw = "")
+		{
+			var key = OpenSSLKey.OpenSSLKey.PEMKeyToXMLKey(keyInfo, pw);
+			if (key.KeyPrivate != null)
+				return new RSAx(RSAxUtils.GetRSAxParameters(key.KeyPrivate, key.KeySize), true);
+			else
+				return new RSAx(RSAxUtils.GetRSAxParameters(key.KeyPublic, key.KeySize), true);
 		}
 
 		/// <summary>

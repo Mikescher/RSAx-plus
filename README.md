@@ -21,7 +21,7 @@ string pubkey = "-----BEGIN PUBLIC KEY-----" + "\n"+
                 "1EXMEfwHXvPZ4zQwdQT3568IwyvABzuc2v6a5xFSPUCJLayvgoLJPNMCAwEAAQ==" + "\n"+
                 "-----END PUBLIC KEY-----";
 
-RSAx rsax = new RSAx(pubkey, size);
+RSAx rsax = RSAx.CreateFromPEM(key);
 byte[] ctx = rsax.Encrypt(Encoding.UTF8.GetBytes(input), false);
 return Convert.ToBase64String(ctx);
 
