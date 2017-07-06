@@ -10,9 +10,9 @@ Contains classes and methods from [RSAx](https://www.codeproject.com/articles/42
 Supports reading keys in the PEM format and XML *(via some conversion methods)*.
 
 
-##Example
+## Example
 
-###C#:
+### C#:
 
 (with this library)
 
@@ -29,7 +29,7 @@ return Convert.ToBase64String(ctx);
 
 ~~~
 
-###PHP:
+### PHP:
 
 (native [openssl](http://php.net/manual/en/book.openssl.php) methods)
 
@@ -61,7 +61,7 @@ function decrypt_rsa($input) {
 
 ~~~
 
-###Javascript:
+### Javascript:
 
 (with [jsencrypt](https://github.com/travist/jsencrypt), needs [jsbn and jsbn2](http://www-cs-students.stanford.edu/%7Etjw/jsbn/), even though the author says otherwise...)
 
@@ -86,7 +86,7 @@ function decrypt_rsa($input) {
 ~~~
 
 
-##TODO
+## TODO
 
  - [ ] Convert PEM to XKMS (public key)
  - [x] Convert PEM to XKMS (private key)
